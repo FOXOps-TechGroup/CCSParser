@@ -1,0 +1,5 @@
+BasedOnStyle: LLVM
+
+NamespaceIndentation: None
+AccessModifierOffset: -4
+IndentAccessModifiers: false

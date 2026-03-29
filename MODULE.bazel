@@ -1,0 +1,24 @@
+module(
+    name = "ccsparser",
+    version = "0.1.0",
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.17")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "googletest", version = "1.17.0")
+bazel_dep(name = "wolfd_bazel_compile_commands", version = "0.5.2")
+
+# nlohmann/json — downloaded as a single header via repository rule.
+third_party_deps = use_extension("//third_party:deps.bzl", "third_party_deps")
+use_repo(third_party_deps, "nlohmann_json", "pugixml", "libcurl")
+
+# googletest 1.17.0's BUILD.bazel is missing the load() for cc_library/cc_test,
+# which Bazel 9 requires.  Use an inline sed command instead of a patch file so
+# the patches/ directory is not needed.
+single_version_override(
+    module_name = "googletest",
+    version = "1.17.0",
+    patch_cmds = [
+        "sed -i '/^licenses/i load(\"@@rules_cc+//cc:defs.bzl\", \"cc_binary\", \"cc_library\", \"cc_test\")' BUILD.bazel",
+    ],
+)

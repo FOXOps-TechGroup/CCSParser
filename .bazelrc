@@ -1,0 +1,16 @@
+# Build flags
+build --enable_platform_specific_config
+build --compilation_mode=opt
+build --cxxopt=-std=c++20
+build --host_cxxopt=-std=c++20
+build --incompatible_enable_cc_toolchain_resolution
+
+# Linux-specific
+build:linux --cxxopt=-std=c++20
+
+# Test
+test --test_output=errors
+test --cxxopt=-std=c++20
+
+# Compilation database
+build:compdb --build_tag_filters=-no_compdb

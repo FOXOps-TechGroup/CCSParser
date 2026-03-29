@@ -1,0 +1,7 @@
+{"type":"state","data":{}}
+{"type":"contest","id":"test","data":{"id":"test","name":"Test","penalty_time":20}}
+{"type":"problems","id":"A","data":{"id":"A","ordinal":1,"label":"A","name":"P-A"}}
+this is not json
+{"type":"teams","id":"t1","data":{"id":"t1","name":"T1"}}
+{"malformed json
+{"type":"submissions","id":"s1","data":{"id":"s1","language_id":"cpp","problem_id":"A","team_id":"t1"}}

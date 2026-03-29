@@ -1,0 +1,17 @@
+{"type":"state","data":{},"token":"t0"}
+{"type":"contest","id":"demo","data":{"id":"demo","name":"Demo Contest","formal_name":"Demo Contest 2025","start_time":"2025-01-01T10:00:00.000+00:00","duration":"5:00:00.000","scoreboard_freeze_duration":"1:00:00.000","scoreboard_type":"pass-fail","penalty_time":20},"token":"t1"}
+{"type":"judgement-types","id":"AC","data":{"id":"AC","name":"correct","penalty":false,"solved":true},"token":"t2"}
+{"type":"judgement-types","id":"WA","data":{"id":"WA","name":"wrong answer","penalty":true,"solved":false},"token":"t3"}
+{"type":"languages","id":"cpp","data":{"id":"cpp","name":"C++","extensions":["cpp","cc"]},"token":"t4"}
+{"type":"problems","id":"A","data":{"id":"A","ordinal":1,"label":"A","name":"Problem A","rgb":"#ff0000","time_limit":2,"test_data_count":10},"token":"t5"}
+{"type":"problems","id":"B","data":{"id":"B","ordinal":2,"label":"B","name":"Problem B","rgb":"#00ff00","time_limit":3,"test_data_count":5},"token":"t6"}
+{"type":"groups","id":"participants","data":{"id":"participants","name":"Participants","hidden":false},"token":"t7"}
+{"type":"organizations","id":"org1","data":{"id":"org1","name":"University A","country":"USA"},"token":"t8"}
+{"type":"teams","id":"team1","data":{"id":"team1","name":"Team Alpha","organization_id":"org1","group_ids":["participants"]},"token":"t9"}
+{"type":"teams","id":"team2","data":{"id":"team2","name":"Team Beta","organization_id":"org1","group_ids":["participants"]},"token":"t10"}
+{"type":"submissions","id":"s1","data":{"id":"s1","language_id":"cpp","problem_id":"A","team_id":"team1","time":"2025-01-01T10:15:00.000+00:00","contest_time":"0:15:00.000"},"token":"t11"}
+{"type":"judgements","id":"j1","data":{"id":"j1","submission_id":"s1","judgement_type_id":"AC","start_time":"2025-01-01T10:15:01.000+00:00","start_contest_time":"0:15:01.000","end_time":"2025-01-01T10:15:05.000+00:00","end_contest_time":"0:15:05.000","max_run_time":0.5},"token":"t12"}
+{"type":"clarifications","id":"c1","data":{"id":"c1","from_team_id":"team1","to_team_id":"team1","problem_id":"A","time":"2025-01-01T10:20:00.000+00:00","contest_time":"0:20:00.000","text":"Is the input always positive?"},"token":"t13"}
+{"type":"awards","id":"gold-medal","data":{"id":"gold-medal","citation":"Gold Medal","team_ids":["team1"]},"token":"t14"}
+
+{"type":"state","data":{"started":"2025-01-01T10:00:00.000+00:00","ended":"2025-01-01T15:00:00.000+00:00","finalized":"2025-01-01T15:01:00.000+00:00","end_of_updates":"2025-01-01T15:02:00.000+00:00"},"token":"t15"}

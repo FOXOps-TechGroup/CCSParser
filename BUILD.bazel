@@ -1,0 +1,281 @@
+
+package(default_visibility = ["//visibility:public"])
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary", "cc_test")
+
+# ---------------------------------------------------------------------------
+# compile_commands target (for clangd/IDE support)
+# ---------------------------------------------------------------------------
+alias(
+    name = "compile_commands",
+    actual = "@wolfd_bazel_compile_commands//:generate_compile_commands",
+    tags = ["manual"],
+)
+
+# ---------------------------------------------------------------------------
+# CCSParser library (core — no network dependencies)
+# ---------------------------------------------------------------------------
+cc_library(
+    name = "ccsparser",
+    srcs = [
+        "src/core/status.cc",
+        "src/core/diagnostic.cc",
+        "src/core/types.cc",
+        "src/core/time_utils.cc",
+        "src/core/time_utils.h",
+        "src/event/ndjson_line_parser.cc",
+        "src/event/ndjson_line_parser.h",
+        "src/profile/version_profile.cc",
+        "src/profile/version_profile.h",
+        "src/profile/decoders/decoder_common.cc",
+        "src/profile/decoders/decoder_common.h",
+        "src/store/contest_store.cc",
+        "src/api/parser.cc",
+        "src/api/xml_feed_parser.cc",
+        "src/io/package_loader.cc",
+        "src/io/file_ref_resolver.cc",
+        "src/scoreboard/scoreboard_builder.cc",
+    ],
+    hdrs = [
+        "include/ccsparser/ccsparser.h",
+        "include/ccsparser/contest_store.h",
+        "include/ccsparser/diagnostic.h",
+        "include/ccsparser/event.h",
+        "include/ccsparser/file_ref_resolver.h",
+        "include/ccsparser/http_client.h",
+        "include/ccsparser/objects.h",
+        "include/ccsparser/observer.h",
+        "include/ccsparser/parse_options.h",
+        "include/ccsparser/parser.h",
+        "include/ccsparser/scoreboard.h",
+        "include/ccsparser/scoreboard_builder.h",
+        "include/ccsparser/status.h",
+        "include/ccsparser/types.h",
+    ],
+    includes = ["include"],
+    strip_include_prefix = "",
+    deps = [
+        "@nlohmann_json//:json",
+        "@pugixml//:pugixml",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# CCSParser HTTP client library (requires libcurl)
+# ---------------------------------------------------------------------------
+cc_library(
+    name = "ccsparser_http",
+    srcs = [
+        "src/net/http_client.cc",
+        "src/api/rest_api_parser.cc",
+    ],
+    deps = [
+        ":ccsparser",
+        "@libcurl//:curl",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Unit tests
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "time_utils_test",
+    srcs = ["tests/unit/time_utils_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "ndjson_line_parser_test",
+    srcs = ["tests/unit/ndjson_line_parser_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "contest_store_test",
+    srcs = ["tests/unit/contest_store_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "diagnostics_test",
+    srcs = ["tests/unit/diagnostics_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "profile_2023_06_decoder_test",
+    srcs = ["tests/unit/profile_2023_06_decoder_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "profile_2026_01_decoder_test",
+    srcs = ["tests/unit/profile_2026_01_decoder_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "file_ref_resolver_test",
+    srcs = ["tests/unit/file_ref_resolver_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Integration tests
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "spec_2023_06_test",
+    srcs = ["tests/integration/spec_2023_06/spec_2023_06_test.cc"],
+    data = glob(["tests/fixtures/**"]),
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "spec_2026_01_test",
+    srcs = ["tests/integration/spec_2026_01/spec_2026_01_test.cc"],
+    data = glob(["tests/fixtures/**"]),
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "package_test",
+    srcs = ["tests/integration/package/package_test.cc"],
+    data = glob(["tests/fixtures/**"]),
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Regression tests
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "regression_test",
+    srcs = ["tests/regression/regression_test.cc"],
+    data = glob(["tests/fixtures/**"]),
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Case file tests (real event-feed data)
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "case_feed_test",
+    srcs = ["tests/integration/case_feed_test.cc"],
+    data = glob(["case/**"]),
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+    tags = ["manual"],
+    size = "large",
+    timeout = "long",
+)
+
+# ---------------------------------------------------------------------------
+# Scoreboard builder unit test
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "scoreboard_builder_test",
+    srcs = ["tests/unit/scoreboard_builder_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# XML feed parser unit test
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "xml_feed_parser_test",
+    srcs = ["tests/unit/xml_feed_parser_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# HTTP client unit test
+# ---------------------------------------------------------------------------
+cc_test(
+    name = "http_client_test",
+    srcs = ["tests/unit/http_client_test.cc"],
+    deps = [
+        ":ccsparser_http",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# Tools (not part of `bazel test //...` default)
+# ---------------------------------------------------------------------------
+
+# DOMjudge REST API integration test (requires network; manual tag).
+cc_test(
+    name = "domjudge_rest_api_test",
+    srcs = ["tests/integration/domjudge_rest_api_test.cc"],
+    deps = [
+        ":ccsparser",
+        ":ccsparser_http",
+        "@nlohmann_json//:json",
+        "@googletest//:gtest_main",
+    ],
+    tags = ["manual"],
+    size = "large",
+    timeout = "long",
+)
+
+cc_binary(
+    name = "scoreboard_csv_dump",
+    srcs = ["tools/scoreboard_csv_dump_main.cc"],
+    deps = [":ccsparser"],
+    tags = ["manual"],
+)
+
+cc_binary(
+    name = "eventfeed_scoreboard_preview",
+    srcs = [
+        "tools/eventfeed_scoreboard_preview_main.cc",
+        "tools/html_scoreboard_renderer.cc",
+        "tools/html_scoreboard_renderer.h",
+    ],
+    deps = [
+        ":ccsparser",
+        ":ccsparser_http",
+    ],
+    tags = ["manual"],
+)
+

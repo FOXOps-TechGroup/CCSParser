@@ -1,0 +1,18 @@
+{"type":"state","data":{},"token":"u0"}
+{"type":"contest","id":"demo26","data":{"id":"demo26","name":"Demo Contest 2026","formal_name":"Demo Contest 2026-01","start_time":"2026-01-15T09:00:00.000+00:00","duration":"5:00:00.000","scoreboard_freeze_duration":"1:00:00.000","scoreboard_type":"pass-fail","penalty_time":"0:20:00"},"token":"u1"}
+{"type":"judgement-types","id":"AC","data":{"id":"AC","name":"correct","penalty":false,"solved":true},"token":"u2"}
+{"type":"judgement-types","id":"WA","data":{"id":"WA","name":"wrong answer","penalty":true,"solved":false,"simplified_judgement_type_id":"WA"},"token":"u3"}
+{"type":"languages","id":"python","data":{"id":"python","name":"Python 3","extensions":["py"]},"token":"u4"}
+{"type":"problems","id":"X","data":{"id":"X","ordinal":1,"label":"X","name":"Problem X","rgb":"#0000ff","time_limit":5,"memory_limit":256,"output_limit":64,"code_limit":128},"token":"u5"}
+{"type":"groups","id":"participants","data":{"id":"participants","name":"Participants"},"token":"u6"}
+{"type":"organizations","id":"org2","data":{"id":"org2","name":"University B","country":"GBR","country_subdivision":"ENG"},"token":"u7"}
+{"type":"teams","id":"team3","data":{"id":"team3","name":"Team Gamma","organization_id":"org2","group_ids":["participants"]},"token":"u8"}
+{"type":"submissions","id":"s2","data":{"id":"s2","language_id":"python","problem_id":"X","team_id":"team3","account_id":"user3","time":"2026-01-15T09:30:00.000+00:00","contest_time":"0:30:00.000"},"token":"u9"}
+{"type":"judgements","id":"j2","data":{"id":"j2","submission_id":"s2","judgement_type_id":"AC","simplified_judgement_type_id":"AC","start_time":"2026-01-15T09:30:01.000+00:00","start_contest_time":"0:30:01.000","end_time":"2026-01-15T09:30:03.000+00:00","end_contest_time":"0:30:03.000","current":true},"token":"u10"}
+{"type":"clarifications","id":"c2","data":{"id":"c2","from_team_id":"team3","to_team_ids":["team3"],"to_group_ids":["participants"],"problem_id":"X","time":"2026-01-15T09:35:00.000+00:00","contest_time":"0:35:00.000","text":"Clarification question"},"token":"u11"}
+{"type":"awards","id":"honors","data":{"id":"honors","citation":"Honors","team_ids":["team3"]},"token":"u12"}
+{"type":"awards","id":"high-honors","data":{"id":"high-honors","citation":"High Honors","team_ids":["team3"]},"token":"u13"}
+{"type":"awards","id":"highest-honors","data":{"id":"highest-honors","citation":"Highest Honors","team_ids":["team3"]},"token":"u14"}
+{"type":"commentary","id":"com1","data":{"id":"com1","time":"2026-01-15T09:31:00.000+00:00","contest_time":"0:31:00.000","message":"Team Gamma solved X!","team_ids":["team3"],"problem_ids":["X"]},"token":"u15"}
+
+{"type":"state","data":{"started":"2026-01-15T09:00:00.000+00:00","ended":"2026-01-15T14:00:00.000+00:00","finalized":"2026-01-15T14:01:00.000+00:00","end_of_updates":"2026-01-15T14:02:00.000+00:00"},"token":"u16"}

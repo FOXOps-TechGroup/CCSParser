@@ -224,6 +224,12 @@ cc_library(
     linkopts = {sys_linkopts},
     visibility = ["//visibility:public"],
 )
+
+filegroup(
+    name = "curl_dll",
+    srcs = glob(["*.dll"]),
+    visibility = ["//visibility:public"],
+)
 """.format(import_block = import_block, sys_linkopts = repr(_WIN_SYSTEM_LINKOPTS))
     else:
         # MinGW without .lib: rely on -lcurl linker flag (GCC toolchain).

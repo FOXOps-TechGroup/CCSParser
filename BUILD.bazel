@@ -237,6 +237,10 @@ cc_test(
         ":ccsparser_http",
         "@googletest//:gtest_main",
     ],
+    data = select({
+        "@platforms//os:windows": ["@libcurl//:curl_dll"],
+        "//conditions:default": [],
+    }),
 )
 
 # ---------------------------------------------------------------------------

@@ -74,17 +74,30 @@ jobs:
           bazelrc: |
             build --cxxopt=-std=c++20
             build --host_cxxopt=-std=c++20
-            build --repo_env=VCPKG_INSTALLATION_ROOT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build & Test
         shell: bash
-        run: bazel test //... --test_output=errors
+        run: |
+          REPO_ENV_FLAG=""
+          if [[ -n "${VCPKG_INSTALLATION_ROOT:-}" ]]; then
+            # Forward the vcpkg root to Bazel repository rules with an explicit
+            # value so it is available even in Bazel's sanitized environment.
+            VCPKG_ROOT_FWD="${VCPKG_INSTALLATION_ROOT//\\//}"
+            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT_FWD}"
+          fi
+          bazel test //... --test_output=errors $REPO_ENV_FLAG
 
       - name: Build manual tool targets
         shell: bash
-        run: bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview
+        run: |
+          REPO_ENV_FLAG=""
+          if [[ -n "${VCPKG_INSTALLATION_ROOT:-}" ]]; then
+            VCPKG_ROOT_FWD="${VCPKG_INSTALLATION_ROOT//\\//}"
+            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT_FWD}"
+          fi
+          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG
 
       - name: Package Artifacts (Unix)
         if: runner.os != 'Windows'

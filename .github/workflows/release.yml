@@ -1,0 +1,152 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y clang-format
+      - name: Run clang-format check
+        run: |
+          find src include tests tools -name "*.cc" -o -name "*.h" | xargs clang-format --dry-run --Werror
+
+  build-cross-platform:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_suffix: linux-x86_64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - os: macos-latest
+            artifact_suffix: macos-arm64
+            archive_ext: tar.gz
+            binary_ext: ""
+          - os: windows-latest
+            artifact_suffix: windows-x86_64
+            archive_ext: zip
+            binary_ext: .exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- 1. 环境与依赖 ---
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update || true
+          sudo apt-get install -y libcurl4-openssl-dev pkg-config
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install curl pkg-config
+
+      - name: Install Windows dependencies (libcurl via vcpkg)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          vcpkg install curl:x64-windows
+          # 将 vcpkg 集成到 MSBuild/环境，使 pkg-config 可以找到 curl
+          vcpkg integrate install
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@0.19.0
+        with:
+          bazelisk-version: '1.x'
+          bazelrc: |
+            build --cxxopt=-std=c++20
+            build --host_cxxopt=-std=c++20
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- 2. 编译与测试 ---
+      - name: Build & Test
+        shell: bash
+        run: bazel test //... --test_output=errors
+
+      - name: Build manual tool targets
+        shell: bash
+        run: bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview
+
+      # --- 3. 产物打包 ---
+      - name: Package Artifacts (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME:-$(git rev-parse --short HEAD)}
+          PACKAGE_NAME="CCSParser-Tools-${VERSION}-${{ matrix.artifact_suffix }}"
+          mkdir -p "pkg/${PACKAGE_NAME}"
+
+          BIN_DIR=$(bazel info bazel-bin)
+          cp "${BIN_DIR}/scoreboard_csv_dump" "pkg/${PACKAGE_NAME}/"
+          cp "${BIN_DIR}/eventfeed_scoreboard_preview" "pkg/${PACKAGE_NAME}/"
+          cp README.md "pkg/${PACKAGE_NAME}/"
+
+          mkdir -p dist
+          tar -czf "dist/${PACKAGE_NAME}.tar.gz" -C pkg "${PACKAGE_NAME}"
+
+      - name: Package Artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { git rev-parse --short HEAD }
+          $packageName = "CCSParser-Tools-$version-${{ matrix.artifact_suffix }}"
+          $pkgDir = "pkg\$packageName"
+          New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+
+          $binDir = (bazel info bazel-bin).Trim()
+          Copy-Item "$binDir\scoreboard_csv_dump.exe" $pkgDir
+          Copy-Item "$binDir\eventfeed_scoreboard_preview.exe" $pkgDir
+          Copy-Item "README.md" $pkgDir
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "pkg\$packageName" -DestinationPath "dist\$packageName.zip"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.os }}
+          path: dist/*
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-cross-platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all_archives
+          pattern: release-artifacts-*
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: all_archives/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

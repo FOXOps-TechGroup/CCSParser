@@ -63,27 +63,16 @@ jobs:
         shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows --triplet x64-windows
-          # Print actual install tree so we can see where files landed
-          Write-Host "=== vcpkg installed ==="
-          Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed" -ErrorAction SilentlyContinue | Select-Object Name
-          Write-Host "=== curl header probe ==="
-          $header = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include\curl\curl.h"
-          if (Test-Path $header) {
-            Write-Host "FOUND: $header"
-          } else {
-            Write-Host "NOT FOUND: $header"
-            # Try to find curl.h anywhere under installed/
-            Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed" -Recurse -Filter "curl.h" -ErrorAction SilentlyContinue | Select-Object FullName
-          }
-          # Write the forward-slash path for Bazel
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')"
+          # Persist vcpkg paths for subsequent steps
+          Add-Content -Path $env:GITHUB_ENV  -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')"
+          # Add DLL directory to PATH so Bazel test runner can find libcurl.dll
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin"
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
         with:
           bazelisk-version: '1.x'
           bazelrc: |
-            build --cxxopt=-std=c++20
             build --host_cxxopt=-std=c++20
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,12 +85,13 @@ jobs:
             REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
           echo "REPO_ENV_FLAG=${REPO_ENV_FLAG}"
-          # MSVC uses /std:c++20 instead of -std=c++20
-          EXTRA_FLAGS=""
+          # MSVC uses /std:c++20; GCC/Clang use -std=c++20
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            EXTRA_FLAGS="--cxxopt=/std:c++20 --host_cxxopt=/std:c++20"
+            CXX_STD="--cxxopt=/std:c++20"
+          else
+            CXX_STD="--cxxopt=-std=c++20"
           fi
-          bazel test //... --test_output=errors $REPO_ENV_FLAG $EXTRA_FLAGS
+          bazel test //... --test_output=all $REPO_ENV_FLAG $CXX_STD
 
       - name: Build manual tool targets
         shell: bash
@@ -110,11 +100,12 @@ jobs:
           if [[ -n "${VCPKG_ROOT:-}" ]]; then
             REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
-          EXTRA_FLAGS=""
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            EXTRA_FLAGS="--cxxopt=/std:c++20 --host_cxxopt=/std:c++20"
+            CXX_STD="--cxxopt=/std:c++20"
+          else
+            CXX_STD="--cxxopt=-std=c++20"
           fi
-          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG $EXTRA_FLAGS
+          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG $CXX_STD
 
       - name: Package Artifacts (Unix)
         if: runner.os != 'Windows'

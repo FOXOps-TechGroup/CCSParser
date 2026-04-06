@@ -62,8 +62,20 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows
-          # Write to GITHUB_ENV so subsequent steps can read it
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows --triplet x64-windows
+          # Print actual install tree so we can see where files landed
+          Write-Host "=== vcpkg installed ==="
+          Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed" -ErrorAction SilentlyContinue | Select-Object Name
+          Write-Host "=== curl header probe ==="
+          $header = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\include\curl\curl.h"
+          if (Test-Path $header) {
+            Write-Host "FOUND: $header"
+          } else {
+            Write-Host "NOT FOUND: $header"
+            # Try to find curl.h anywhere under installed/
+            Get-ChildItem "$env:VCPKG_INSTALLATION_ROOT\installed" -Recurse -Filter "curl.h" -ErrorAction SilentlyContinue | Select-Object FullName
+          }
+          # Write the forward-slash path for Bazel
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')"
 
       - name: Set up Bazel

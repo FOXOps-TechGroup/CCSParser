@@ -96,7 +96,12 @@ jobs:
             REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
           echo "REPO_ENV_FLAG=${REPO_ENV_FLAG}"
-          bazel test //... --test_output=errors $REPO_ENV_FLAG
+          # MSVC uses /std:c++20 instead of -std=c++20
+          EXTRA_FLAGS=""
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            EXTRA_FLAGS="--cxxopt=/std:c++20 --host_cxxopt=/std:c++20"
+          fi
+          bazel test //... --test_output=errors $REPO_ENV_FLAG $EXTRA_FLAGS
 
       - name: Build manual tool targets
         shell: bash
@@ -105,7 +110,11 @@ jobs:
           if [[ -n "${VCPKG_ROOT:-}" ]]; then
             REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
-          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG
+          EXTRA_FLAGS=""
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            EXTRA_FLAGS="--cxxopt=/std:c++20 --host_cxxopt=/std:c++20"
+          fi
+          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG $EXTRA_FLAGS
 
       - name: Package Artifacts (Unix)
         if: runner.os != 'Windows'

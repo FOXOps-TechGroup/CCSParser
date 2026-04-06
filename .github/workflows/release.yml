@@ -62,10 +62,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # VCPKG_INSTALLATION_ROOT is set by the GitHub Actions runner image.
-          # Use it explicitly to ensure the correct vcpkg instance is used.
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows
-          echo "VCPKG_INSTALLATION_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          # Write to GITHUB_ENV so subsequent steps can read it
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')"
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
@@ -81,21 +80,18 @@ jobs:
         shell: bash
         run: |
           REPO_ENV_FLAG=""
-          if [[ -n "${VCPKG_INSTALLATION_ROOT:-}" ]]; then
-            # Forward the vcpkg root to Bazel repository rules with an explicit
-            # value so it is available even in Bazel's sanitized environment.
-            VCPKG_ROOT_FWD="${VCPKG_INSTALLATION_ROOT//\\//}"
-            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT_FWD}"
+          if [[ -n "${VCPKG_ROOT:-}" ]]; then
+            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
+          echo "REPO_ENV_FLAG=${REPO_ENV_FLAG}"
           bazel test //... --test_output=errors $REPO_ENV_FLAG
 
       - name: Build manual tool targets
         shell: bash
         run: |
           REPO_ENV_FLAG=""
-          if [[ -n "${VCPKG_INSTALLATION_ROOT:-}" ]]; then
-            VCPKG_ROOT_FWD="${VCPKG_INSTALLATION_ROOT//\\//}"
-            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT_FWD}"
+          if [[ -n "${VCPKG_ROOT:-}" ]]; then
+            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           fi
           bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG
 

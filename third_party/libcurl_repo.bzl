@@ -59,18 +59,21 @@ def _probe_unix(rctx, path):
     r = rctx.execute(["sh", "-c", "test -f '{p}/curl/curl.h' && echo found".format(p = path)])
     return r.return_code == 0 and "found" in r.stdout
 
+_PWSH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
 _CMD = "C:\\Windows\\System32\\cmd.exe"
 
 def _probe_win_dir(rctx, path):
-    """Return True if curl\\curl.h exists under *path* (Windows cmd)."""
+    """Return True if curl\\curl.h exists under *path*."""
     win_path = path.replace("/", "\\")
-    r = rctx.execute([_CMD, "/c", "if exist \"{p}\\curl\\curl.h\" echo found".format(p = win_path)])
+    r = rctx.execute([_PWSH, "-NoProfile", "-Command",
+                      "if (Test-Path '{p}\\curl\\curl.h') {{ 'found' }} else {{ 'missing' }}".format(p = win_path)])
     return r.return_code == 0 and "found" in r.stdout
 
 def _probe_win_file(rctx, path):
-    """Return True if the single file *path* exists (Windows cmd)."""
+    """Return True if the single file *path* exists."""
     win_path = path.replace("/", "\\")
-    r = rctx.execute([_CMD, "/c", "if exist \"{p}\" echo found".format(p = win_path)])
+    r = rctx.execute([_PWSH, "-NoProfile", "-Command",
+                      "if (Test-Path '{p}') {{ 'found' }} else {{ 'missing' }}".format(p = win_path)])
     return r.return_code == 0 and "found" in r.stdout
 
 # ── Unix implementation ───────────────────────────────────────────────────────
@@ -150,26 +153,18 @@ def _libcurl_windows(rctx):
             break
 
     if include_path == None:
-        # Collect diagnostics to help identify whether the probe command itself
-        # is failing or the files are genuinely absent.
-        diag_lines = ["libcurl headers not found on Windows. Probe diagnostics:"]
-        for candidate in candidates:
-            win_path = candidate.replace("/", "\\")
-            r = rctx.execute([_CMD, "/c", "if exist \"{p}\\curl\\curl.h\" (echo FOUND) else (echo MISSING)".format(p = win_path)])
-            diag_lines.append("  [rc={rc}] {p} -> stdout={out} stderr={err}".format(
-                rc = r.return_code,
-                p = candidate,
-                out = repr(r.stdout.strip()),
-                err = repr(r.stderr.strip()),
-            ))
-        # Also check whether cmd.exe itself is reachable.
-        r_ver = rctx.execute([_CMD, "/c", "ver"])
-        diag_lines.append("  cmd ver: rc={} out={}".format(r_ver.return_code, repr(r_ver.stdout.strip())))
-        fail("\n".join(diag_lines))
+        fail(
+            "libcurl headers not found on Windows.\n" +
+            "Install with one of:\n" +
+            "  vcpkg:  vcpkg install curl:x64-windows\n" +
+            "  MSYS2:  pacman -S mingw-w64-x86_64-curl\n" +
+            "  Choco:  choco install curl",
+        )
 
     # Copy headers into the external repo (symlinks require admin/DeveloperMode).
     win_src = include_path.replace("/", "\\") + "\\curl"
-    rctx.execute([_CMD, "/c", "xcopy /E /I /Y \"{src}\" curl\\".format(src = win_src)])
+    rctx.execute([_PWSH, "-NoProfile", "-Command",
+                  "Copy-Item -Recurse -Force '{src}' curl".format(src = win_src)])
 
     # Locate the import library (.lib or MinGW .dll.a).
     lib_dir = include_path.replace("/include", "/lib")

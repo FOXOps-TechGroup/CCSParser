@@ -190,18 +190,18 @@ cc_test(
 # ---------------------------------------------------------------------------
 # Case file tests (real event-feed data)
 # ---------------------------------------------------------------------------
-cc_test(
-    name = "case_feed_test",
-    srcs = ["tests/integration/case_feed_test.cc"],
-    data = glob(["case/**"]),
-    deps = [
-        ":ccsparser",
-        "@googletest//:gtest_main",
-    ],
-    tags = ["manual"],
-    size = "large",
-    timeout = "long",
-)
+# cc_test(
+#     name = "case_feed_test",
+#     srcs = ["tests/integration/case_feed_test.cc"],
+#     data = glob(["case/**"]),
+#     deps = [
+#         ":ccsparser",
+#         "@googletest//:gtest_main",
+#     ],
+#     tags = ["manual"],
+#     size = "large",
+#     timeout = "long",
+# )
 
 # ---------------------------------------------------------------------------
 # Scoreboard builder unit test

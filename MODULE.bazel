@@ -13,12 +13,12 @@ third_party_deps = use_extension("//third_party:deps.bzl", "third_party_deps")
 use_repo(third_party_deps, "nlohmann_json", "pugixml", "libcurl")
 
 # googletest 1.17.0's BUILD.bazel is missing the load() for cc_library/cc_test,
-# which Bazel 9 requires.  Use an inline sed command instead of a patch file so
-# the patches/ directory is not needed.
+# which Bazel 9 requires.  patch_cmds runs via bash on all platforms (including
+# Windows via Git for Windows), so a single awk command is sufficient.
 single_version_override(
     module_name = "googletest",
     version = "1.17.0",
     patch_cmds = [
-        "sed -i '/^licenses/i load(\"@@rules_cc+//cc:defs.bzl\", \"cc_binary\", \"cc_library\", \"cc_test\")' BUILD.bazel",
+        "awk '/^licenses/{print \"load(\\\"@@rules_cc+//cc:defs.bzl\\\", \\\"cc_binary\\\", \\\"cc_library\\\", \\\"cc_test\\\")\"} {print}' BUILD.bazel > BUILD.bazel.tmp && mv BUILD.bazel.tmp BUILD.bazel",
     ],
 )

@@ -142,7 +142,11 @@ std::string NowIso8601() {
   auto now = std::chrono::system_clock::now();
   auto tt = std::chrono::system_clock::to_time_t(now);
   struct tm tm_buf;
+#ifdef _WIN32
+  localtime_s(&tm_buf, &tt);
+#else
   localtime_r(&tt, &tm_buf);
+#endif
   char buf[32];
   std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm_buf);
   return std::string(buf);

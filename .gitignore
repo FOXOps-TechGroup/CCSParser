@@ -21,6 +21,9 @@
 .classpath
 .project
 .claude
+.secret
+CLAUDE.md
+/.cache/*
 eclipse-*bin/
 /bazel.iml
 # Ignore all bazel-* symlinks. There is no full list since this can change

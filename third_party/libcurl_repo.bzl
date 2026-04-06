@@ -128,8 +128,21 @@ cc_library(
 
 def _libcurl_windows(rctx):
     # Locate headers.
+    # Prepend paths derived from VCPKG_INSTALLATION_ROOT so CI environments
+    # (e.g. GitHub Actions, where the variable is set by the runner image) are
+    # found before the hardcoded fallback list.
+    candidates = list(_WIN_INCLUDE_CANDIDATES)
+    vcpkg_root = rctx.os.environ.get("VCPKG_INSTALLATION_ROOT", "")
+    if vcpkg_root:
+        vcpkg_root = vcpkg_root.replace("\\", "/").rstrip("/")
+        candidates = [
+            vcpkg_root + "/installed/x64-windows/include",
+            vcpkg_root + "/installed/x86-windows/include",
+            vcpkg_root + "/installed/arm64-windows/include",
+        ] + candidates
+
     include_path = None
-    for candidate in _WIN_INCLUDE_CANDIDATES:
+    for candidate in candidates:
         if _probe_win_dir(rctx, candidate):
             include_path = candidate
             break
@@ -233,4 +246,5 @@ def _libcurl_impl(rctx):
 libcurl_configure = repository_rule(
     implementation = _libcurl_impl,
     local = True,  # System-dependent.
+    environ = ["VCPKG_INSTALLATION_ROOT"],
 )

@@ -59,16 +59,18 @@ def _probe_unix(rctx, path):
     r = rctx.execute(["sh", "-c", "test -f '{p}/curl/curl.h' && echo found".format(p = path)])
     return r.return_code == 0 and "found" in r.stdout
 
+_CMD = "C:\\Windows\\System32\\cmd.exe"
+
 def _probe_win_dir(rctx, path):
     """Return True if curl\\curl.h exists under *path* (Windows cmd)."""
     win_path = path.replace("/", "\\")
-    r = rctx.execute(["cmd", "/c", "if exist \"{p}\\curl\\curl.h\" echo found".format(p = win_path)])
+    r = rctx.execute([_CMD, "/c", "if exist \"{p}\\curl\\curl.h\" echo found".format(p = win_path)])
     return r.return_code == 0 and "found" in r.stdout
 
 def _probe_win_file(rctx, path):
     """Return True if the single file *path* exists (Windows cmd)."""
     win_path = path.replace("/", "\\")
-    r = rctx.execute(["cmd", "/c", "if exist \"{p}\" echo found".format(p = win_path)])
+    r = rctx.execute([_CMD, "/c", "if exist \"{p}\" echo found".format(p = win_path)])
     return r.return_code == 0 and "found" in r.stdout
 
 # ── Unix implementation ───────────────────────────────────────────────────────
@@ -158,7 +160,7 @@ def _libcurl_windows(rctx):
 
     # Copy headers into the external repo (symlinks require admin/DeveloperMode).
     win_src = include_path.replace("/", "\\") + "\\curl"
-    rctx.execute(["cmd", "/c", "xcopy /E /I /Y \"{src}\" curl\\".format(src = win_src)])
+    rctx.execute([_CMD, "/c", "xcopy /E /I /Y \"{src}\" curl\\".format(src = win_src)])
 
     # Locate the import library (.lib or MinGW .dll.a).
     lib_dir = include_path.replace("/include", "/lib")

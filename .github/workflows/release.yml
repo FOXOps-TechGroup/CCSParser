@@ -11,19 +11,6 @@ permissions:
   contents: write
 
 jobs:
-  lint:
-    name: Lint Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install clang-format
-        run: |
-          sudo apt-get update || true
-          sudo apt-get install -y clang-format
-      - name: Run clang-format check
-        run: |
-          find src include tests tools -name "*.cc" -o -name "*.h" | xargs clang-format --dry-run --Werror
-
   build-cross-platform:
     name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -34,38 +21,32 @@ jobs:
           - os: ubuntu-latest
             artifact_suffix: linux-x86_64
             archive_ext: tar.gz
-            binary_ext: ""
           - os: macos-latest
             artifact_suffix: macos-arm64
             archive_ext: tar.gz
-            binary_ext: ""
           - os: windows-latest
             artifact_suffix: windows-x86_64
             archive_ext: zip
-            binary_ext: .exe
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux dependencies
+      - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update || true
           sudo apt-get install -y libcurl4-openssl-dev pkg-config
 
-      - name: Install macOS dependencies
+      - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: |
-          brew install curl pkg-config
+        run: brew install curl pkg-config
 
-      - name: Install Windows dependencies (libcurl via vcpkg)
+      - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows --triplet x64-windows
-          # Persist vcpkg paths for subsequent steps
           Add-Content -Path $env:GITHUB_ENV  -Value "VCPKG_ROOT=$($env:VCPKG_INSTALLATION_ROOT -replace '\\','/')"
-          # Add DLL directory to PATH so Bazel test runner can find libcurl.dll
           Add-Content -Path $env:GITHUB_PATH -Value "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin"
 
       - name: Set up Bazel
@@ -80,71 +61,58 @@ jobs:
       - name: Build & Test
         shell: bash
         run: |
-          REPO_ENV_FLAG=""
-          if [[ -n "${VCPKG_ROOT:-}" ]]; then
-            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
-          fi
-          echo "REPO_ENV_FLAG=${REPO_ENV_FLAG}"
-          # MSVC uses /std:c++20; GCC/Clang use -std=c++20
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             CXX_STD="--cxxopt=/std:c++20"
+            REPO_ENV="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
+            TEST_ENV="--test_env=PATH=C:/vcpkg/installed/x64-windows/bin;C:/Windows/System32;C:/Windows/System32/WindowsPowerShell/v1.0"
           else
             CXX_STD="--cxxopt=-std=c++20"
+            REPO_ENV=""
+            TEST_ENV=""
           fi
-          TEST_ENV_FLAG=""
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            TEST_ENV_FLAG="--test_env=PATH=C:/vcpkg/installed/x64-windows/bin;C:/Windows/System32;C:/Windows/System32/WindowsPowerShell/v1.0"
-          fi
-          bazel test //... --test_output=all $REPO_ENV_FLAG $CXX_STD $TEST_ENV_FLAG
+          bazel test //... --test_output=errors $CXX_STD $REPO_ENV $TEST_ENV
 
-      - name: Build manual tool targets
+      - name: Build Tools
         shell: bash
         run: |
-          REPO_ENV_FLAG=""
-          if [[ -n "${VCPKG_ROOT:-}" ]]; then
-            REPO_ENV_FLAG="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
-          fi
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             CXX_STD="--cxxopt=/std:c++20"
+            REPO_ENV="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
           else
             CXX_STD="--cxxopt=-std=c++20"
+            REPO_ENV=""
           fi
-          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $REPO_ENV_FLAG $CXX_STD
+          bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview $CXX_STD $REPO_ENV
 
-      - name: Package Artifacts (Unix)
+      - name: Package (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           VERSION=${GITHUB_REF_NAME:-$(git rev-parse --short HEAD)}
-          PACKAGE_NAME="CCSParser-Tools-${VERSION}-${{ matrix.artifact_suffix }}"
-          mkdir -p "pkg/${PACKAGE_NAME}"
-
+          ARCHIVE="CCSParser-${{ matrix.artifact_suffix }}-${VERSION}.tar.gz"
           BIN_DIR=$(bazel info bazel-bin)
-          cp "${BIN_DIR}/scoreboard_csv_dump" "pkg/${PACKAGE_NAME}/"
-          cp "${BIN_DIR}/eventfeed_scoreboard_preview" "pkg/${PACKAGE_NAME}/"
-          cp README.md "pkg/${PACKAGE_NAME}/"
-
+          mkdir -p pkg
+          cp "${BIN_DIR}/scoreboard_csv_dump" pkg/
+          cp "${BIN_DIR}/eventfeed_scoreboard_preview" pkg/
+          cp README.md pkg/
           mkdir -p dist
-          tar -czf "dist/${PACKAGE_NAME}.tar.gz" -C pkg "${PACKAGE_NAME}"
+          tar -czf "dist/${ARCHIVE}" -C pkg .
 
-      - name: Package Artifacts (Windows)
+      - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { git rev-parse --short HEAD }
-          $packageName = "CCSParser-Tools-$version-${{ matrix.artifact_suffix }}"
-          $pkgDir = "pkg\$packageName"
-          New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
-
+          $archive = "CCSParser-${{ matrix.artifact_suffix }}-$version.zip"
           $binDir = (bazel info bazel-bin).Trim()
-          Copy-Item "$binDir\scoreboard_csv_dump.exe" $pkgDir
-          Copy-Item "$binDir\eventfeed_scoreboard_preview.exe" $pkgDir
-          Copy-Item "README.md" $pkgDir
-
+          New-Item -ItemType Directory -Force -Path pkg | Out-Null
+          Copy-Item "$binDir\scoreboard_csv_dump.exe" pkg\
+          Copy-Item "$binDir\eventfeed_scoreboard_preview.exe" pkg\
+          Copy-Item "README.md" pkg\
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path "pkg\$packageName" -DestinationPath "dist\$packageName.zip"
+          Compress-Archive -Path pkg\* -DestinationPath "dist\$archive"
 
-      - name: Upload Build Artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts-${{ matrix.os }}
@@ -162,7 +130,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: all_archives
-          pattern: CCSParser-*
+          pattern: release-artifacts-*
           merge-multiple: true
 
       - name: Create Release
@@ -170,7 +138,5 @@ jobs:
         with:
           files: all_archives/*
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -60,7 +60,6 @@ def _probe_unix(rctx, path):
     return r.return_code == 0 and "found" in r.stdout
 
 _PWSH = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
-_CMD = "C:\\Windows\\System32\\cmd.exe"
 
 def _probe_win_dir(rctx, path):
     """Return True if curl\\curl.h exists under *path*."""
@@ -132,10 +131,8 @@ cc_library(
 # ── Windows implementation ────────────────────────────────────────────────────
 
 def _libcurl_windows(rctx):
-    # Locate headers.
-    # Prepend paths derived from VCPKG_INSTALLATION_ROOT so CI environments
-    # (e.g. GitHub Actions, where the variable is set by the runner image) are
-    # found before the hardcoded fallback list.
+    # VCPKG_INSTALLATION_ROOT is forwarded via --repo_env in CI; prepend its
+    # triplet paths before the hardcoded fallback list.
     candidates = list(_WIN_INCLUDE_CANDIDATES)
     vcpkg_root = rctx.os.environ.get("VCPKG_INSTALLATION_ROOT", "")
     if vcpkg_root:
@@ -161,12 +158,11 @@ def _libcurl_windows(rctx):
             "  Choco:  choco install curl",
         )
 
-    # Copy headers into the external repo (symlinks require admin/DeveloperMode).
+    # Copy headers; symlinks require Developer Mode or admin on Windows.
     win_src = include_path.replace("/", "\\") + "\\curl"
     rctx.execute([_PWSH, "-NoProfile", "-Command",
                   "Copy-Item -Recurse -Force '{src}' curl".format(src = win_src)])
 
-    # Locate the import library (.lib or MinGW .dll.a).
     lib_dir = include_path.replace("/include", "/lib")
     lib_candidates = [
         lib_dir + "/libcurl.lib",
@@ -180,7 +176,6 @@ def _libcurl_windows(rctx):
             found_lib = lib
             break
 
-    # Locate the DLL for cc_import shared_library field.
     bin_dir = include_path.replace("/include", "/bin")
     dll_candidates = [
         bin_dir + "/libcurl.dll",
@@ -195,7 +190,6 @@ def _libcurl_windows(rctx):
             break
 
     if found_lib != None:
-        # MSVC / clang-cl path: use cc_import with the import library.
         rctx.symlink(found_lib, "libcurl.lib")
         if found_dll != None:
             import_block = """\
@@ -232,7 +226,7 @@ filegroup(
 )
 """.format(import_block = import_block, sys_linkopts = repr(_WIN_SYSTEM_LINKOPTS))
     else:
-        # MinGW without .lib: rely on -lcurl linker flag (GCC toolchain).
+        # MinGW: no .lib, rely on -lcurl.
         build_content = """\
 load("@rules_cc//cc:defs.bzl", "cc_library")
 

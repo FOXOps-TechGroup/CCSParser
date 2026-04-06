@@ -98,7 +98,11 @@ std::string AbsoluteTime::ToString() const {
 
   time_t t = static_cast<time_t>(epoch_sec);
   struct tm tm_buf;
+#ifdef _WIN32
+  gmtime_s(&tm_buf, &t);
+#else
   gmtime_r(&t, &tm_buf);
+#endif
 
   char buf[64];
   int tz_h = tz_offset_minutes / 60;

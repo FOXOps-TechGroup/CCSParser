@@ -150,13 +150,22 @@ def _libcurl_windows(rctx):
             break
 
     if include_path == None:
-        fail(
-            "libcurl headers not found on Windows.\n" +
-            "Install with one of:\n" +
-            "  vcpkg:  vcpkg install curl:x64-windows\n" +
-            "  MSYS2:  pacman -S mingw-w64-x86_64-curl\n" +
-            "  Choco:  choco install curl",
-        )
+        # Collect diagnostics to help identify whether the probe command itself
+        # is failing or the files are genuinely absent.
+        diag_lines = ["libcurl headers not found on Windows. Probe diagnostics:"]
+        for candidate in candidates:
+            win_path = candidate.replace("/", "\\")
+            r = rctx.execute([_CMD, "/c", "if exist \"{p}\\curl\\curl.h\" (echo FOUND) else (echo MISSING)".format(p = win_path)])
+            diag_lines.append("  [{rc}] {p} -> stdout={out!r} stderr={err!r}".format(
+                rc = r.return_code,
+                p = candidate,
+                out = r.stdout.strip(),
+                err = r.stderr.strip(),
+            ))
+        # Also check whether cmd.exe itself is reachable.
+        r_ver = rctx.execute([_CMD, "/c", "ver"])
+        diag_lines.append("  cmd ver: rc={} out={!r}".format(r_ver.return_code, r_ver.stdout.strip()))
+        fail("\n".join(diag_lines))
 
     # Copy headers into the external repo (symlinks require admin/DeveloperMode).
     win_src = include_path.replace("/", "\\") + "\\curl"

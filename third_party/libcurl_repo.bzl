@@ -156,15 +156,15 @@ def _libcurl_windows(rctx):
         for candidate in candidates:
             win_path = candidate.replace("/", "\\")
             r = rctx.execute([_CMD, "/c", "if exist \"{p}\\curl\\curl.h\" (echo FOUND) else (echo MISSING)".format(p = win_path)])
-            diag_lines.append("  [{rc}] {p} -> stdout={out!r} stderr={err!r}".format(
+            diag_lines.append("  [rc={rc}] {p} -> stdout={out} stderr={err}".format(
                 rc = r.return_code,
                 p = candidate,
-                out = r.stdout.strip(),
-                err = r.stderr.strip(),
+                out = repr(r.stdout.strip()),
+                err = repr(r.stderr.strip()),
             ))
         # Also check whether cmd.exe itself is reachable.
         r_ver = rctx.execute([_CMD, "/c", "ver"])
-        diag_lines.append("  cmd ver: rc={} out={!r}".format(r_ver.return_code, r_ver.stdout.strip()))
+        diag_lines.append("  cmd ver: rc={} out={}".format(r_ver.return_code, repr(r_ver.stdout.strip())))
         fail("\n".join(diag_lines))
 
     # Copy headers into the external repo (symlinks require admin/DeveloperMode).

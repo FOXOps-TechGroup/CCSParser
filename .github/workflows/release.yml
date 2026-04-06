@@ -47,7 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- 1. 环境与依赖 ---
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -63,9 +62,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          vcpkg install curl:x64-windows
-          # 将 vcpkg 集成到 MSBuild/环境，使 pkg-config 可以找到 curl
-          vcpkg integrate install
+          # VCPKG_INSTALLATION_ROOT is set by the GitHub Actions runner image.
+          # Use it explicitly to ensure the correct vcpkg instance is used.
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install curl:x64-windows
+          echo "VCPKG_INSTALLATION_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.0
@@ -74,10 +74,10 @@ jobs:
           bazelrc: |
             build --cxxopt=-std=c++20
             build --host_cxxopt=-std=c++20
+            build --repo_env=VCPKG_INSTALLATION_ROOT
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- 2. 编译与测试 ---
       - name: Build & Test
         shell: bash
         run: bazel test //... --test_output=errors
@@ -86,7 +86,6 @@ jobs:
         shell: bash
         run: bazel build -c opt //:scoreboard_csv_dump //:eventfeed_scoreboard_preview
 
-      # --- 3. 产物打包 ---
       - name: Package Artifacts (Unix)
         if: runner.os != 'Windows'
         shell: bash
@@ -138,7 +137,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: all_archives
-          pattern: release-artifacts-*
+          pattern: CCSParser-*
           merge-multiple: true
 
       - name: Create Release

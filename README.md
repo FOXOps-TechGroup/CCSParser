@@ -18,6 +18,86 @@ A high-stability, extensible C++20 library for parsing CCS (Contest Control Syst
 | Contest package ZIP | `PackageParser::ParsePackageZip(path, options)` |
 | Incremental line-by-line | `EventFeedParser::CreateStreamingSession(options)` |
 
+## Cross-Platform Build Instructions
+
+### Prerequisites (all platforms)
+
+- [Bazel](https://bazel.build/) 9.0.1+ (or [Bazelisk](https://github.com/bazelbuild/bazelisk))
+- C++20-capable compiler
+
+---
+
+### Windows
+
+**Prerequisites:**
+
+- [vcpkg](https://github.com/microsoft/vcpkg) installed (e.g. at `C:\vcpkg`)
+- MSVC Build Tools (Visual Studio Build Tools with VC component)
+
+**1. Add to `PATH` (user or system environment variables):**
+
+```powershell
+# Example, you should modify this to your custom vcpkg installation dir
+C:\vcpkg
+C:\vcpkg\installed\x64-windows\bin
+```
+
+**2. Set the MSVC compiler root (adjust the year/edition as appropriate):**
+
+```powershell
+# Example, you should modify this to your actual installation dir
+$env:BAZEL_VC="C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC"
+```
+
+**3. Install the curl dependency via vcpkg:**
+
+```powershell
+vcpkg install curl:x64-windows
+```
+
+**4. Build and test:**
+
+```powershell
+bazel build //...
+bazel test //... --cxxopt=/std:c++20 --repo_env=VCPKG_INSTALLATION_ROOT=C:/vcpkg
+```
+
+---
+
+### Linux (Ubuntu / Debian)
+
+**1. Install dependencies:**
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libcurl4-openssl-dev pkg-config
+```
+
+**2. Build and test:**
+
+```bash
+bazel test //... --cxxopt=-std=c++20
+```
+
+---
+
+### macOS(Darwin)
+
+**1. Install dependencies via Homebrew:**
+
+```bash
+brew install curl pkg-config
+```
+
+**2. Build and test:**
+
+```bash
+bazel build //...
+bazel test //... --cxxopt=-std=c++20
+```
+
+---
+
 ## Quick Start
 
 ```cpp

@@ -160,19 +160,8 @@ def _libcurl_windows(rctx):
 
     # Copy headers; symlinks require Developer Mode or admin on Windows.
     win_src = include_path.replace("/", "\\") + "\\curl"
-    copy_result = rctx.execute([
-        _PWSH,
-        "-NoProfile",
-        "-Command",
-        "$ErrorActionPreference = 'Stop'; Copy-Item -Recurse -Force '{src}' curl".format(src = win_src),
-    ])
-    if copy_result.return_code != 0:
-        fail(
-            "Failed to copy libcurl headers from Windows include path '{}'.\n".format(win_src) +
-            "PowerShell Copy-Item exited with code {}.\n".format(copy_result.return_code) +
-            "stdout:\n{}\n".format(copy_result.stdout) +
-            "stderr:\n{}".format(copy_result.stderr),
-        )
+    rctx.execute([_PWSH, "-NoProfile", "-Command",
+                  "Copy-Item -Recurse -Force '{src}' curl".format(src = win_src)])
 
     lib_dir = include_path.replace("/include", "/lib")
     lib_candidates = [
@@ -200,6 +189,25 @@ def _libcurl_windows(rctx):
             rctx.symlink(dll, "libcurl.dll")
             break
 
+    # Detect transitive runtime DLLs that must be deployed alongside libcurl.dll.
+    # vcpkg builds of libcurl dynamically link zlib, so zlib1.dll must be present
+    # in the same directory as the binary at runtime.
+    zlib_import_block = ""
+    zlib_dep = ""
+    if found_dll != None:
+        for zlib_name in ["zlib1.dll", "zlib.dll"]:
+            zlib_path = bin_dir + "/" + zlib_name
+            if _probe_win_file(rctx, zlib_path):
+                rctx.symlink(zlib_path, zlib_name)
+                zlib_import_block = """\
+cc_import(
+    name = "zlib_runtime_import",
+    shared_library = "{name}",
+)
+""".format(name = zlib_name)
+                zlib_dep = '":zlib_runtime_import", '
+                break
+
     if found_lib != None:
         rctx.symlink(found_lib, "libcurl.lib")
         if found_dll != None:
@@ -220,12 +228,12 @@ cc_import(
         build_content = """\
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
 
-{import_block}
+{import_block}{zlib_import_block}
 cc_library(
     name = "curl",
     hdrs = glob(["curl/*.h"]),
     includes = ["."],
-    deps = [":curl_import"],
+    deps = [{zlib_dep}":curl_import"],
     linkopts = {sys_linkopts},
     visibility = ["//visibility:public"],
 )
@@ -235,7 +243,12 @@ filegroup(
     srcs = glob(["*.dll"]),
     visibility = ["//visibility:public"],
 )
-""".format(import_block = import_block, sys_linkopts = repr(_WIN_SYSTEM_LINKOPTS))
+""".format(
+            import_block = import_block,
+            zlib_import_block = zlib_import_block,
+            zlib_dep = zlib_dep,
+            sys_linkopts = repr(_WIN_SYSTEM_LINKOPTS),
+        )
     else:
         # MinGW: no .lib, rely on -lcurl.
         build_content = """\

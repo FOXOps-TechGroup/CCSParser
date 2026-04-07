@@ -160,8 +160,19 @@ def _libcurl_windows(rctx):
 
     # Copy headers; symlinks require Developer Mode or admin on Windows.
     win_src = include_path.replace("/", "\\") + "\\curl"
-    rctx.execute([_PWSH, "-NoProfile", "-Command",
-                  "Copy-Item -Recurse -Force '{src}' curl".format(src = win_src)])
+    copy_result = rctx.execute([
+        _PWSH,
+        "-NoProfile",
+        "-Command",
+        "$ErrorActionPreference = 'Stop'; Copy-Item -Recurse -Force '{src}' curl".format(src = win_src),
+    ])
+    if copy_result.return_code != 0:
+        fail(
+            "Failed to copy libcurl headers from Windows include path '{}'.\n".format(win_src) +
+            "PowerShell Copy-Item exited with code {}.\n".format(copy_result.return_code) +
+            "stdout:\n{}\n".format(copy_result.stdout) +
+            "stderr:\n{}".format(copy_result.stderr),
+        )
 
     lib_dir = include_path.replace("/include", "/lib")
     lib_candidates = [

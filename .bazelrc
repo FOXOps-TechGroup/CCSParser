@@ -1,16 +1,33 @@
 # Build flags
 build --enable_platform_specific_config
 build --compilation_mode=opt
-build --cxxopt=-std=c++20
-build --host_cxxopt=-std=c++20
 build --incompatible_enable_cc_toolchain_resolution
+
+# Windows-specific (MSVC)
+build:windows --cxxopt=/std:c++20
+build:windows --host_cxxopt=/std:c++20
+build:windows --cxxopt=/utf-8
+build:windows --host_cxxopt=/utf-8
 
 # Linux-specific
 build:linux --cxxopt=-std=c++20
+build:linux --host_cxxopt=-std=c++20
+
+# macOS-specific
+build:macos --cxxopt=-std=c++20
+build:macos --host_cxxopt=-std=c++20
 
 # Test
 test --test_output=errors
-test --cxxopt=-std=c++20
+test:windows --cxxopt=/std:c++20
+test:windows --host_cxxopt=/std:c++20
+test:windows --cxxopt=/utf-8
+test:windows --host_cxxopt=/utf-8
+test:linux --cxxopt=-std=c++20
+test:linux --host_cxxopt=-std=c++20
+test:macos --cxxopt=-std=c++20
+test:macos --host_cxxopt=-std=c++20
 
 # Compilation database
 build:compdb --build_tag_filters=-no_compdb
+

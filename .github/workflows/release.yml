@@ -64,7 +64,8 @@ jobs:
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             CXX_STD="--cxxopt=/std:c++20"
             REPO_ENV="--repo_env=VCPKG_INSTALLATION_ROOT=${VCPKG_ROOT}"
-            TEST_ENV="--test_env=PATH=C:/vcpkg/installed/x64-windows/bin;C:/Windows/System32;C:/Windows/System32/WindowsPowerShell/v1.0"
+            TEST_PATH="${VCPKG_ROOT}/installed/x64-windows/bin;C:/Windows/System32;C:/Windows/System32/WindowsPowerShell/v1.0"
+            TEST_ENV="--test_env=PATH=${TEST_PATH}"
           else
             CXX_STD="--cxxopt=-std=c++20"
             REPO_ENV=""

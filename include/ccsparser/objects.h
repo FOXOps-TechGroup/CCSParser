@@ -79,7 +79,8 @@ struct Problem : public ContestObject {
   std::optional<std::string> name;
   std::optional<std::string> rgb;
   std::optional<std::string> color;
-  std::optional<int> time_limit;
+  std::optional<double> time_limit;
+  std::optional<double> max_score;
   std::optional<int> test_data_count;
   std::optional<int> memory_limit;     // 2026-01.
   std::optional<int> output_limit;     // 2026-01.
@@ -196,6 +197,7 @@ struct Judgement : public ContestObject {
   std::optional<std::string> submission_id;
   std::optional<std::string> judgement_type_id;
   std::optional<std::string> simplified_judgement_type_id;  // 2026-01.
+  std::optional<double> score;
   std::optional<AbsoluteTime> start_time;
   std::optional<RelativeTime> start_contest_time;
   std::optional<AbsoluteTime> end_time;

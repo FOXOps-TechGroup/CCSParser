@@ -29,6 +29,7 @@ struct RawEvent {
   EventShape shape = EventShape::kSingleObject;
   std::optional<std::string> token;
   size_t line_no = 0;
+  bool data_is_null = false;
 
   // The raw JSON of the data field (object or array).
   // Empty for delete events.
@@ -42,9 +43,14 @@ struct RawEvent {
 struct EventCursor {
   size_t line_no = 0;
   size_t event_count = 0;
+  // Last token in the contiguous prefix of successfully applied events.
   std::optional<std::string> last_token;
+  // In the modern notification format this is an object ID, not since_id.
   std::optional<std::string> last_event_id;
   bool end_of_updates = false;
+  // False once an event is rejected or ignored; rebuild before trusting the
+  // store as a complete snapshot, even if later events have been applied.
+  bool contiguous = true;
 };
 
 }  // namespace ccsparser

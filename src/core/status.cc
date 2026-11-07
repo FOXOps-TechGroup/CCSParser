@@ -45,7 +45,10 @@ std::string Status::ToString() const {
     case StatusCode::kUnavailable:
       result = "UNAVAILABLE";
       break;
-  }
+    case StatusCode::kCancelled:
+      result = "CANCELLED";
+      break;
+    }
   if (!message_.empty()) {
     result += ": ";
     result += message_;

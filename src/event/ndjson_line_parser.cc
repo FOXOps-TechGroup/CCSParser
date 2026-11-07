@@ -103,6 +103,7 @@ StatusOr<LineParseResult> ParseNdjsonLine(std::string_view line,
   bool data_is_null = data_it->is_null();
   bool data_is_array = data_it->is_array();
   bool data_is_object = data_it->is_object();
+  event.data_is_null = data_is_null;
 
   if (has_id) {
     // Validate id is string.

@@ -28,6 +28,9 @@ struct ParseOptions {
   bool keep_raw_json = false;
   bool enable_validation = true;
   bool enable_checkpointing = true;
+  // Reject known version-specific wire type mismatches. This is not complete
+  // schema validation and currently checks contest.penalty_time.
+  bool strict_version = false;
   ParseLimits limits;
 };
 

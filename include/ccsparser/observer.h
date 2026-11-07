@@ -34,6 +34,8 @@ class Observer {
   }
   virtual void OnDiagnostic(const Diagnostic& diag) { (void)diag; }
   virtual void OnEndOfUpdates() {}
+  // Called after an unknown extension event has been applied as raw data.
+  virtual void OnRawExtensionUpdated(const RawEvent& event) { (void)event; }
 };
 
 }  // namespace ccsparser

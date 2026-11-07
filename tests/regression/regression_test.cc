@@ -344,6 +344,113 @@ TEST_F(RegressionTest, invalid_collection_replace_keeps_old_collection) {
   EXPECT_TRUE(session->store().GetObject(ObjectType::kTeams, "t2").ok());
 }
 
+TEST_F(RegressionTest, cursor_does_not_cross_failed_collection) {
+  ParseOptions opts;
+  opts.error_policy = ErrorPolicy::kContinue;
+  auto session = MakeSession(opts);
+
+  ASSERT_TRUE(
+      session
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t1","data":{"id":"t1","name":"Alpha"},"token":"t1"})")
+          .ok());
+  ASSERT_TRUE(session->cursor().last_token.has_value());
+  EXPECT_EQ(*session->cursor().last_token, "t1");
+  EXPECT_TRUE(session->cursor().contiguous);
+
+  ASSERT_TRUE(
+      session
+          ->ConsumeLine(
+              R"({"type":"teams","id":null,"data":[{"id":"t2"},42],"token":"t2"})")
+          .ok());
+  EXPECT_FALSE(session->cursor().contiguous);
+  EXPECT_EQ(*session->cursor().last_token, "t1");
+  EXPECT_EQ(session->store().GetEventLog().size(), 1u);
+  EXPECT_TRUE(session->store().GetObject(ObjectType::kTeams, "t1").ok());
+  EXPECT_FALSE(session->store().GetObject(ObjectType::kTeams, "t2").ok());
+
+  ASSERT_TRUE(
+      session
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t3","data":{"id":"t3"},"token":"t3"})")
+          .ok());
+  EXPECT_TRUE(session->store().GetObject(ObjectType::kTeams, "t3").ok());
+  EXPECT_EQ(*session->cursor().last_token, "t1");
+  EXPECT_FALSE(session->cursor().contiguous);
+}
+
+TEST_F(RegressionTest, cursor_does_not_cross_malformed_or_unknown_events) {
+  ParseOptions opts;
+  opts.error_policy = ErrorPolicy::kContinue;
+  auto malformed = MakeSession(opts);
+  ASSERT_TRUE(
+      malformed
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t1","data":{"id":"t1"},"token":"t1"})")
+          .ok());
+  ASSERT_TRUE(malformed->ConsumeLine("{broken").ok());
+  ASSERT_TRUE(
+      malformed
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t2","data":{"id":"t2"},"token":"t2"})")
+          .ok());
+  ASSERT_TRUE(malformed->cursor().last_token.has_value());
+  EXPECT_EQ(*malformed->cursor().last_token, "t1");
+  EXPECT_FALSE(malformed->cursor().contiguous);
+
+  auto unknown = MakeSession(opts);
+  ASSERT_TRUE(
+      unknown
+          ->ConsumeLine(
+              R"({"type":"extension","id":"x","data":{"id":"x"},"token":"u1"})")
+          .ok());
+  EXPECT_FALSE(unknown->cursor().contiguous);
+  EXPECT_FALSE(unknown->cursor().last_token.has_value());
+  ASSERT_TRUE(
+      unknown
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t1","data":{"id":"t1"},"token":"u2"})")
+          .ok());
+  EXPECT_FALSE(unknown->cursor().last_token.has_value());
+}
+
+TEST_F(RegressionTest, cursor_advances_after_success_and_ignores_keepalives) {
+  auto session = MakeSession();
+  ASSERT_TRUE(
+      session
+          ->ConsumeLine(R"({"type":"contest","data":{"id":"c1"},"token":"t1"})")
+          .ok());
+  ASSERT_TRUE(session->ConsumeLine("").ok());
+  ASSERT_TRUE(
+      session
+          ->ConsumeLine(
+              R"({"type":"teams","id":"t1","data":{"id":"t1"},"token":"t2"})")
+          .ok());
+  ASSERT_TRUE(session->cursor().last_token.has_value());
+  EXPECT_EQ(*session->cursor().last_token, "t2");
+  EXPECT_EQ(session->cursor().event_count, 2u);
+  EXPECT_TRUE(session->cursor().contiguous);
+}
+
+TEST_F(RegressionTest, end_of_updates_is_notified_and_is_the_last_event) {
+  ParseOptions opts;
+  opts.error_policy = ErrorPolicy::kFailFast;
+  auto session = MakeSession(opts);
+  auto observer = std::make_shared<RecordingObserver>();
+  session->mutable_store().AddObserver(observer);
+  ASSERT_TRUE(session->ConsumeLine(
+      R"({"type":"state","id":null,"data":{"end_of_updates":"2026-01-01T00:00:00Z"},"token":"final"})").ok());
+  EXPECT_TRUE(session->cursor().end_of_updates);
+  ASSERT_GE(observer->events.size(), 2u);
+  EXPECT_EQ(observer->events.back().kind, RecordingObserver::EventKind::kEndOfUpdates);
+  EXPECT_TRUE(session->ConsumeLine("").ok());
+  EXPECT_EQ(session->ConsumeLine(
+      R"({"type":"teams","id":"a","data":{"id":"a"},"token":"late"})").code(), StatusCode::kCorruptedInput);
+  EXPECT_EQ(*session->cursor().last_token, "final");
+  EXPECT_FALSE(session->cursor().contiguous);
+  EXPECT_FALSE(session->store().GetObject(ObjectType::kTeams, "a").ok());
+}
+
 // =====================================================================
 // consecutive_corruption_limit_triggers
 // =====================================================================

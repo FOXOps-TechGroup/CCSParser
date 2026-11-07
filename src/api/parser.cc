@@ -46,18 +46,6 @@ struct StreamingParseSession::Impl {
   Status ApplyEvent(internal::LineParseResult& lr) {
     auto& event = lr.event;
 
-    // Update cursor basics.
-    cursor.line_no = event.line_no;
-    cursor.event_count++;
-
-    // Update token only on valid skeleton.
-    if (event.token.has_value()) {
-      cursor.last_token = event.token;
-    }
-    if (event.id.has_value()) {
-      cursor.last_event_id = event.id;
-    }
-
     // Notify observers of raw event.
     // (Observers are registered on the store and notified via store methods.)
 
@@ -75,6 +63,21 @@ struct StreamingParseSession::Impl {
         return Status(StatusCode::kParseError,
                       "Unknown event type: " + event.type_str);
       }
+      if (options.unknown_type_policy == UnknownTypePolicy::kWarnAndIgnore) {
+        cursor.contiguous = false;
+        return Status::Ok();
+      }
+      if (event.shape != EventShape::kDelete) {
+        event.data_json = event.data_is_null ? "null" : lr.parsed_data.dump();
+      }
+      auto status = store.ApplyRawExtension(event);
+      if (!status.ok()) return status;
+      if (options.keep_event_log) store.RecordEvent(event);
+      ++cursor.event_count;
+      if (cursor.contiguous) {
+        if (event.token) cursor.last_token = event.token;
+        if (event.id) cursor.last_event_id = event.id;
+      }
       return Status::Ok();
     }
 
@@ -84,25 +87,34 @@ struct StreamingParseSession::Impl {
       DetectVersion(event, lr.parsed_data);
     }
 
-    // Record event if logging is enabled.
+    // Apply event based on shape, forwarding pre-parsed JSON.
+    Status status = Status::Ok();
+    switch (event.shape) {
+      case EventShape::kDelete:
+        status = ApplyDelete(event);
+        break;
+      case EventShape::kSingleObject:
+        status = ApplySingleObject(event, lr.parsed_data);
+        break;
+      case EventShape::kCollectionReplace:
+        status = ApplyCollectionReplace(event, lr.parsed_data);
+        break;
+      case EventShape::kSingletonUpdate:
+        status = ApplySingletonUpdate(event, lr.parsed_data);
+        break;
+    }
+    if (!status.ok()) return status;
+
     if (options.keep_event_log) {
-      // Lazily populate data_json for the event log.
-      if (event.data_json.empty() && !lr.parsed_data.is_null()) {
+      if (event.data_json.empty() && event.shape != EventShape::kDelete) {
         event.data_json = lr.parsed_data.dump();
       }
       store.RecordEvent(event);
     }
-
-    // Apply event based on shape, forwarding pre-parsed JSON.
-    switch (event.shape) {
-      case EventShape::kDelete:
-        return ApplyDelete(event);
-      case EventShape::kSingleObject:
-        return ApplySingleObject(event, lr.parsed_data);
-      case EventShape::kCollectionReplace:
-        return ApplyCollectionReplace(event, lr.parsed_data);
-      case EventShape::kSingletonUpdate:
-        return ApplySingletonUpdate(event, lr.parsed_data);
+    cursor.event_count++;
+    if (cursor.contiguous) {
+      if (event.token.has_value()) cursor.last_token = event.token;
+      if (event.id.has_value()) cursor.last_event_id = event.id;
     }
     return Status::Ok();
   }
@@ -177,9 +189,8 @@ struct StreamingParseSession::Impl {
                         std::to_string(event.line_no));
     }
 
-    return store.ApplyUpsert(event.object_type,
-                              event.id.value_or(dr.object->id),
-                              std::move(dr.object));
+    const std::string id = event.id.value_or(dr.object->id);
+    return store.ApplyUpsert(event.object_type, id, std::move(dr.object));
   }
 
   Status ApplyCollectionReplace(RawEvent& event,
@@ -219,16 +230,18 @@ struct StreamingParseSession::Impl {
                         std::to_string(event.line_no));
     }
 
-    // Check for end_of_updates in state.
+    bool end_of_updates = false;
     if (event.object_type == ObjectType::kState) {
       auto* state_obj = dynamic_cast<State*>(dr.object.get());
-      if (state_obj && state_obj->end_of_updates.has_value()) {
-        cursor.end_of_updates = true;
-      }
+      end_of_updates = state_obj && state_obj->end_of_updates.has_value();
     }
-
-    return store.ApplySingletonUpdate(event.object_type,
-                                       std::move(dr.object));
+    auto status =
+        store.ApplySingletonUpdate(event.object_type, std::move(dr.object));
+    if (status.ok() && end_of_updates) {
+      cursor.end_of_updates = true;
+      store.NotifyEndOfUpdates();
+    }
+    return status;
   }
 };
 
@@ -250,6 +263,7 @@ Status StreamingParseSession::ConsumeLine(std::string_view line) {
       internal::ParseNdjsonLine(line, current_line, impl_->options);
 
   if (!parse_result.ok()) {
+    impl_->cursor.contiguous = false;
     impl_->consecutive_errors++;
 
     Diagnostic diag;
@@ -310,8 +324,12 @@ Status StreamingParseSession::ConsumeLine(std::string_view line) {
     return Status::Ok();
   }
 
-  auto apply_status = impl_->ApplyEvent(lr);
+  auto apply_status = impl_->cursor.end_of_updates
+                          ? Status(StatusCode::kCorruptedInput,
+                                   "Event received after end_of_updates")
+                          : impl_->ApplyEvent(lr);
   if (!apply_status.ok()) {
+    impl_->cursor.contiguous = false;
     impl_->consecutive_errors++;
 
     Diagnostic diag;
@@ -367,10 +385,22 @@ ApiVersion StreamingParseSession::resolved_version() const {
   return impl_->resolved_version;
 }
 
+bool StreamingParseSession::has_explicit_version() const {
+  return impl_->options.version != ApiVersion::kAuto;
+}
+
+bool StreamingParseSession::enforces_declared_version() const {
+  return has_explicit_version() && impl_->options.strict_version;
+}
+
 // ---- EventFeedParser ----
 
 StatusOr<std::unique_ptr<StreamingParseSession>>
 EventFeedParser::CreateStreamingSession(const ParseOptions& options) {
+  if (options.strict_version && options.version == ApiVersion::kAuto) {
+    return Status(StatusCode::kInvalidArgument,
+                  "Strict version validation requires an explicit version");
+  }
   auto impl = std::make_unique<StreamingParseSession::Impl>();
   impl->options = options;
 

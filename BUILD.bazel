@@ -21,10 +21,12 @@ cc_library(
         "src/core/status.cc",
         "src/core/diagnostic.cc",
         "src/core/types.cc",
+        "src/core/visibility.cc",
         "src/core/time_utils.cc",
         "src/core/time_utils.h",
         "src/event/ndjson_line_parser.cc",
         "src/event/ndjson_line_parser.h",
+        "src/event/event_feed_stream.cc",
         "src/profile/version_profile.cc",
         "src/profile/version_profile.h",
         "src/profile/decoders/decoder_common.cc",
@@ -41,6 +43,7 @@ cc_library(
         "include/ccsparser/contest_store.h",
         "include/ccsparser/diagnostic.h",
         "include/ccsparser/event.h",
+        "include/ccsparser/event_feed_stream.h",
         "include/ccsparser/file_ref_resolver.h",
         "include/ccsparser/http_client.h",
         "include/ccsparser/objects.h",
@@ -51,6 +54,7 @@ cc_library(
         "include/ccsparser/scoreboard_builder.h",
         "include/ccsparser/status.h",
         "include/ccsparser/types.h",
+        "include/ccsparser/visibility.h",
     ],
     includes = ["include"],
     strip_include_prefix = "",
@@ -68,6 +72,7 @@ cc_library(
     srcs = [
         "src/net/http_client.cc",
         "src/api/rest_api_parser.cc",
+        "src/api/event_feed_http.cc",
     ],
     deps = [
         ":ccsparser",
@@ -78,6 +83,15 @@ cc_library(
 # ---------------------------------------------------------------------------
 # Unit tests
 # ---------------------------------------------------------------------------
+cc_test(
+    name = "visibility_test",
+    srcs = ["tests/unit/visibility_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
 cc_test(
     name = "time_utils_test",
     srcs = ["tests/unit/time_utils_test.cc"],
@@ -90,6 +104,15 @@ cc_test(
 cc_test(
     name = "ndjson_line_parser_test",
     srcs = ["tests/unit/ndjson_line_parser_test.cc"],
+    deps = [
+        ":ccsparser",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "event_feed_stream_test",
+    srcs = ["tests/unit/event_feed_stream_test.cc"],
     deps = [
         ":ccsparser",
         "@googletest//:gtest_main",
@@ -233,6 +256,19 @@ cc_test(
 cc_test(
     name = "http_client_test",
     srcs = ["tests/unit/http_client_test.cc"],
+    deps = [
+        ":ccsparser_http",
+        "@googletest//:gtest_main",
+    ],
+    data = select({
+        "@platforms//os:windows": ["@libcurl//:curl_dll"],
+        "//conditions:default": [],
+    }),
+)
+
+cc_test(
+    name = "event_feed_http_test",
+    srcs = ["tests/integration/event_feed_http_test.cc"],
     deps = [
         ":ccsparser_http",
         "@googletest//:gtest_main",

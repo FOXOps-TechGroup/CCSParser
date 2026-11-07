@@ -17,6 +17,7 @@ A high-stability, extensible C++20 library for parsing CCS (Contest Control Syst
 | Contest package directory | `PackageParser::ParsePackageDirectory(path, options)` |
 | Contest package ZIP | `PackageParser::ParsePackageZip(path, options)` |
 | Incremental line-by-line | `EventFeedParser::CreateStreamingSession(options)` |
+| Long-lived HTTP NDJSON | `StreamEventFeed(url, session, options)` from `ccsparser_http` |
 
 ## Cross-Platform Build Instructions
 
@@ -236,6 +237,9 @@ auto sb = ccsparser::BuildScoreboard(parse_result.store);
 
 Ranking: solved ↓, penalty ↑, team_id (stable tie-break).  Awards are associated
 with team rows.  First-to-solve is flagged per cell.
+This builder produces final pass-fail standings, not a public frozen view. It
+rejects explicitly score-based or unknown types; applications should use the
+CCS authoritative scoreboard or separately configured scoring rules for those.
 
 ## Scoreboard Preview Tool
 

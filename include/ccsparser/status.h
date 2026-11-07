@@ -23,7 +23,8 @@ enum class StatusCode {
   kCorruptedInput,
   kLimitExceeded,
   kEndOfStream,
-  kUnavailable,  // Network/HTTP error.
+  kUnavailable, // Network/HTTP error.
+  kCancelled,
 };
 
 // Lightweight status type for operation results.

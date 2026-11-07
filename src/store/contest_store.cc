@@ -7,10 +7,13 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace ccsparser {
 
@@ -22,6 +25,12 @@ struct ObjectTypeHash {
 };
 
 struct ContestStore::Impl {
+  struct RawExtension {
+    enum class Kind { kSingleton, kCollection };
+    Kind kind = Kind::kCollection;
+    std::string singleton;
+    std::map<std::string, std::string> objects;
+  };
   // Typed singletons.
   std::unique_ptr<Contest> contest;
   std::unique_ptr<State> state;
@@ -33,6 +42,7 @@ struct ContestStore::Impl {
                                         std::unique_ptr<ContestObject>>,
                      ObjectTypeHash>
       collections;
+  std::unordered_map<std::string, RawExtension> raw_extensions;
 
   // Event log for checkpoint/rollback.
   std::vector<RawEvent> event_log;
@@ -116,6 +126,31 @@ std::vector<std::string> ContestStore::GetKnownProperties(
   return {};
 }
 
+StatusOr<std::string> ContestStore::GetRawSingleton(std::string_view type) const {
+  auto found = impl_->raw_extensions.find(std::string(type));
+  if (found == impl_->raw_extensions.end() || found->second.kind != Impl::RawExtension::Kind::kSingleton) {
+    return Status(StatusCode::kNotFound, "Raw extension singleton not found");
+  }
+  return found->second.singleton;
+}
+
+StatusOr<std::string> ContestStore::GetRawObject(std::string_view type,
+                                                  std::string_view id) const {
+  auto found = impl_->raw_extensions.find(std::string(type));
+  if (found == impl_->raw_extensions.end() || found->second.kind != Impl::RawExtension::Kind::kCollection) {
+    return Status(StatusCode::kNotFound, "Raw extension collection not found");
+  }
+  auto object = found->second.objects.find(std::string(id));
+  if (object == found->second.objects.end()) return Status(StatusCode::kNotFound, "Raw extension object not found");
+  return object->second;
+}
+
+std::map<std::string, std::string> ContestStore::ListRawObjects(std::string_view type) const {
+  auto found = impl_->raw_extensions.find(std::string(type));
+  if (found == impl_->raw_extensions.end() || found->second.kind != Impl::RawExtension::Kind::kCollection) return {};
+  return found->second.objects;
+}
+
 Checkpoint ContestStore::CreateCheckpoint() const {
   return Checkpoint{impl_->event_log.size()};
 }
@@ -137,6 +172,7 @@ Status ContestStore::Rollback(Checkpoint cp) {
   impl_->contest.reset();
   impl_->state.reset();
   impl_->collections.clear();
+  impl_->raw_extensions.clear();
   impl_->event_count = 0;
   impl_->event_log = std::move(saved_events);
   return Status::Ok();
@@ -227,7 +263,68 @@ Status ContestStore::ApplyCollectionReplace(
 
 Status ContestStore::ApplySingletonUpdate(
     ObjectType type, std::unique_ptr<ContestObject> obj) {
-  return ApplyUpsert(type, obj->id, std::move(obj));
+  if (!obj) {
+    return Status(StatusCode::kInvalidArgument, "Singleton object is null");
+  }
+  const std::string id = obj->id;
+  return ApplyUpsert(type, id, std::move(obj));
+}
+
+Status ContestStore::ApplyRawExtension(const RawEvent& event) {
+  if (event.type_str.empty() || event.object_type != ObjectType::kUnknown) {
+    return Status(StatusCode::kInvalidArgument, "Invalid raw extension type");
+  }
+  using Kind = Impl::RawExtension::Kind;
+  const bool singleton = event.shape == EventShape::kSingletonUpdate;
+  const auto existing = impl_->raw_extensions.find(event.type_str);
+  if (existing != impl_->raw_extensions.end() &&
+      existing->second.kind != (singleton ? Kind::kSingleton : Kind::kCollection)) {
+    return Status(StatusCode::kParseError, "Raw extension changed between singleton and collection");
+  }
+  if (event.shape == EventShape::kDelete) {
+    if (!event.id || event.id->empty()) return Status(StatusCode::kParseError, "Raw delete requires an id");
+    auto& raw = impl_->raw_extensions[event.type_str];
+    raw.kind = Kind::kCollection;
+    raw.objects.erase(*event.id);
+  } else {
+    const auto data = nlohmann::json::parse(event.data_json, nullptr, false);
+    if (data.is_discarded()) return Status(StatusCode::kParseError, "Invalid raw extension data");
+    if (singleton) {
+      if (!data.is_object() && !data.is_null()) return Status(StatusCode::kParseError, "Invalid raw singleton");
+      auto& raw = impl_->raw_extensions[event.type_str];
+      raw.kind = Kind::kSingleton;
+      raw.singleton = data.dump();
+    } else if (event.shape == EventShape::kSingleObject) {
+      if (!event.id || event.id->empty() || !data.is_object()) {
+        return Status(StatusCode::kParseError, "Invalid raw extension object");
+      }
+      auto item_id = data.find("id");
+      if (item_id != data.end() && (!item_id->is_string() || item_id->get<std::string>() != *event.id)) {
+        return Status(StatusCode::kParseError, "Raw object id disagrees with event id");
+      }
+      auto& raw = impl_->raw_extensions[event.type_str];
+      raw.kind = Kind::kCollection;
+      raw.objects[*event.id] = data.dump();
+    } else if (event.shape == EventShape::kCollectionReplace) {
+      if (!data.is_array()) return Status(StatusCode::kParseError, "Invalid raw extension collection");
+      std::map<std::string, std::string> replacement;
+      for (const auto& object : data) {
+        if (!object.is_object() || !object.contains("id") || !object["id"].is_string()) {
+          return Status(StatusCode::kParseError, "Raw collection object requires an id");
+        }
+        const auto id = object["id"].get<std::string>();
+        if (id.empty() || !replacement.emplace(id, object.dump()).second) {
+          return Status(StatusCode::kParseError, "Raw collection object id is empty or duplicated");
+        }
+      }
+      auto& raw = impl_->raw_extensions[event.type_str];
+      raw.kind = Kind::kCollection;
+      raw.objects = std::move(replacement);
+    }
+  }
+  ++impl_->event_count;
+  for (auto& observer : impl_->observers) observer->OnRawExtensionUpdated(event);
+  return Status::Ok();
 }
 
 void ContestStore::RecordEvent(RawEvent event) {
@@ -237,6 +334,12 @@ void ContestStore::RecordEvent(RawEvent event) {
 void ContestStore::NotifyDiagnostic(const Diagnostic& diag) {
   for (auto& obs : impl_->observers) {
     obs->OnDiagnostic(diag);
+  }
+}
+
+void ContestStore::NotifyEndOfUpdates() {
+  for (auto& obs : impl_->observers) {
+    obs->OnEndOfUpdates();
   }
 }
 

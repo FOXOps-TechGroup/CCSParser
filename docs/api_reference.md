@@ -37,11 +37,42 @@ Static methods for parsing NDJSON event-feeds.
 |--------|-------------|
 | `ConsumeLine(line)` | Feed one line of input. Returns `Status`. |
 | `Finish()` | Signal end of input. |
-| `cursor()` | Current `EventCursor` (line count, token, end-of-updates). |
+| `cursor()` | Current `EventCursor`; `last_token` only advances across a contiguous prefix of applied events. |
 | `store()` | Immutable reference to the built `ContestStore`. |
 | `mutable_store()` | Mutable reference (for checkpoint/rollback). |
 | `diagnostics()` | All diagnostics emitted so far. |
 | `resolved_version()` | Detected or explicit `ApiVersion`. |
+| `has_explicit_version()` / `enforces_declared_version()` | Whether the version was supplied explicitly and strict wire checks were enabled. |
+
+### HTTP event-feed streaming
+
+Link `//:ccsparser_http` and include `ccsparser/event_feed_stream.h`.
+`StreamEventFeed(url, session, options)` consumes complete NDJSON records as
+they arrive without waiting for the server to close. The session must select
+`k2023_06` or `k2026_01` explicitly and enable `strict_version`. Use
+`unknown_type_policy = UnknownTypePolicy::kPreserveRaw` when the source can
+emit extensions: their objects, singletons, deletes and collection replacements
+are kept separately by type. `ContestStore::GetRawObject`, `ListRawObjects`
+and `GetRawSingleton` return JSON data; `Observer::OnRawExtensionUpdated`
+notifies after an extension has been applied. A malformed extension cannot move
+the safe cursor forward. Set
+`options.since_token` for percent-encoded reconnection, `on_event` for applied
+records, and `on_activity` for complete records including keepalive lines.
+`http.bearer_token`, `http.basic_auth`, `http.ca_bundle_path` and
+`http.should_cancel` configure authentication, trust and cancellation.
+Set `http.require_https = true` for credentialed production feeds: it requires
+certificate verification, rejects credentials embedded in the URL, restricts
+the scheme to HTTPS, and does not follow redirects. The option defaults to
+false for compatibility with existing local and test feeds.
+
+The returned `http_status` must be checked by the caller: non-2xx response
+bodies are not parsed. The stream returns with `end_of_updates` set when the
+terminal state arrives, without waiting for the peer to close the connection.
+A rejected or truncated record returns an error and does not advance the safe
+cursor past it. Reconnection, invalid-token recovery,
+version discovery, persistent snapshots and idle-timeout policy are the
+caller's responsibility. The older `RestApiParser::FetchEventFeed` buffers the
+whole response and must not be used for a continuously open event-feed.
 
 ### ParseResult
 
@@ -70,6 +101,7 @@ Returned by batch parse methods.
 | `keep_raw_json` | `false` | Attach raw line to diagnostics. |
 | `enable_validation` | `true` | Run field validation. |
 | `enable_checkpointing` | `true` | Enable checkpoint/rollback support. |
+| `strict_version` | `false` | Reject known wire type mismatches for the explicitly selected version; currently checks `contest.penalty_time`, not every schema field. |
 | `limits` | (see below) | Defensive parse limits. |
 
 ### ParseLimits
@@ -162,7 +194,16 @@ Represents a CCS file reference: `href`, `filename`, `mime`, `width`, `height`,
 StatusOr<ScoreboardSnapshot> BuildScoreboard(const ContestStore& store);
 ```
 
-Constructs a final ICPC-style scoreboard from a populated store.
+Constructs final pass-fail standings from a populated store; this is not a
+freeze-filtered public view. Explicit score-based and unknown scoreboard types
+return `kFailedPrecondition` instead of applying pass-fail rules. Missing type
+retains legacy behavior and does not establish the actual contest rules.
+
+`EvaluatePublicJudgementVisibility(contest, state, submission)` checks the
+contest interval and inclusive freeze boundary, and exposes frozen judgements
+after thaw. It does not filter hidden teams, private fields, media, awards,
+extensions or other resources; callers still need a complete authorized public
+projection before sending data to a screen.
 
 ### ScoreboardSnapshot
 
@@ -212,6 +253,13 @@ Every parse issue produces a `Diagnostic` with:
 | `object_type` / `object_id` | Context (if available). |
 
 ### Error Recovery
+
+`EventCursor::contiguous` becomes false after a rejected or ignored event and
+stays false for the session. Later successful events may still update the store
+under `kContinue`, but the store is no longer a complete resumable snapshot;
+rebuild from a known-good checkpoint. Persist a model snapshot and its token
+atomically. The modern notification `id` identifies an object and must not be
+used as a legacy `since_id` cursor.
 
 | Category | Behavior |
 |----------|----------|

@@ -4,7 +4,9 @@
 
 // Unit tests for the ScoreboardBuilder module.
 
+#include <memory>
 #include <string>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -43,6 +45,38 @@ TEST(ScoreboardBuilderTest, EmptyStoreProducesEmptyScoreboard) {
   auto sb_or = BuildScoreboard(pr.store);
   ASSERT_TRUE(sb_or.ok());
   EXPECT_TRUE(sb_or->rows.empty());
+}
+
+TEST(ScoreboardBuilderTest, RejectsExplicitScoreBasedOrUnknownRules) {
+  for (const auto& type : {"score", "custom"}) {
+    auto pr = Feed({std::string(R"({"type":"contest","id":"c","data":{"id":"c","scoreboard_type":")") +
+                    type + R"("}})"});
+    auto result = BuildScoreboard(pr.store);
+    EXPECT_EQ(result.status().code(), StatusCode::kFailedPrecondition);
+  }
+}
+
+TEST(ScoreboardBuilderTest, IgnoresSubmissionsBeforeContestStart) {
+  auto pr = Feed({
+      R"({"type":"contest","id":"c","data":{"id":"c","scoreboard_type":"pass-fail"}})",
+      R"({"type":"teams","id":"t","data":{"id":"t","name":"Team"}})",
+      R"({"type":"problems","id":"A","data":{"id":"A","label":"A"}})",
+      R"({"type":"judgement-types","id":"AC","data":{"id":"AC","solved":true}})"});
+  auto submission = std::make_unique<Submission>();
+  submission->id = "s";
+  submission->team_id = "t";
+  submission->problem_id = "A";
+  submission->contest_time = RelativeTime{-1000};
+  ASSERT_TRUE(pr.store.ApplyUpsert(ObjectType::kSubmissions, "s", std::move(submission)).ok());
+  auto judgement = std::make_unique<Judgement>();
+  judgement->id = "j";
+  judgement->submission_id = "s";
+  judgement->judgement_type_id = "AC";
+  ASSERT_TRUE(pr.store.ApplyUpsert(ObjectType::kJudgements, "j", std::move(judgement)).ok());
+  auto result = BuildScoreboard(pr.store);
+  ASSERT_TRUE(result.ok());
+  ASSERT_EQ(result->rows.size(), 1u);
+  EXPECT_EQ(result->rows.front().solved, 0);
 }
 
 TEST(ScoreboardBuilderTest, BasicRanking) {

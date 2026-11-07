@@ -23,6 +23,9 @@ namespace ccsparser {
 //   1. solved (descending)
 //   2. penalty (ascending)
 //   3. team_id (ascending, stable tie-break)
+// Explicit score-based or unknown scoreboard types are rejected. A missing
+// type retains legacy pass-fail behavior and must not be treated as proof of
+// the scoring rules by an application consuming live contests.
 StatusOr<ScoreboardSnapshot> BuildScoreboard(const ContestStore& store);
 
 }  // namespace ccsparser

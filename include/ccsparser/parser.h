@@ -47,8 +47,10 @@ class StreamingParseSession {
   ContestStore& mutable_store();
   const std::vector<Diagnostic>& diagnostics() const;
   ApiVersion resolved_version() const;
+  bool has_explicit_version() const;
+  bool enforces_declared_version() const;
 
- private:
+  private:
   friend class EventFeedParser;
   struct Impl;
   std::unique_ptr<Impl> impl_;

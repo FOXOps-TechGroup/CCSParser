@@ -43,6 +43,12 @@ StatusOr<ScoreboardSnapshot> BuildScoreboard(const ContestStore& store) {
   int64_t contest_duration_ms = INT64_MAX;  // Unlimited if not set.
   const Contest* contest = store.GetContest();
   if (contest) {
+    if (contest->scoreboard_type.has_value() &&
+        *contest->scoreboard_type != "pass-fail") {
+      return Status(StatusCode::kFailedPrecondition,
+                    "This builder supports only pass-fail standings; use the "
+                    "authoritative scoreboard or configured scoring rules");
+    }
     snap.contest_name = contest->name.value_or("");
     snap.contest_formal_name = contest->formal_name.value_or("");
     if (contest->penalty_time.has_value()) {
@@ -203,8 +209,8 @@ StatusOr<ScoreboardSnapshot> BuildScoreboard(const ContestStore& store) {
     if (!sub->team_id.has_value() || !sub->problem_id.has_value()) continue;
     int64_t ct =
         sub->contest_time.has_value() ? sub->contest_time->milliseconds : 0;
-    // Skip submissions made at or after the contest duration (post-contest).
-    if (ct >= contest_duration_ms) continue;
+    // Submissions outside the contest interval do not affect standings.
+    if (ct < 0 || ct >= contest_duration_ms) continue;
     ordered_subs.push_back({sub, &js, ct});
   }
   std::sort(ordered_subs.begin(), ordered_subs.end(),

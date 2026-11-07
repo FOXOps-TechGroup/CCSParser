@@ -28,8 +28,14 @@ struct HttpBasicAuth {
 // Options for HTTP requests.
 struct HttpRequestOptions {
   std::optional<HttpBasicAuth> basic_auth;
+  std::optional<std::string> bearer_token;
+  std::optional<std::string> ca_bundle_path;
   int timeout_seconds = 30;
   bool verify_ssl = true;
+  // Require verified HTTPS, reject URL credentials and do not follow redirects.
+  bool require_https = false;
+  // Called during streaming transfers, including while the connection is idle.
+  std::function<bool()> should_cancel;
 };
 
 // Response from an HTTP GET request.

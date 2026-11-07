@@ -64,10 +64,11 @@ const std::unordered_set<std::string_view> kLanguageKeys = {
 };
 
 const std::unordered_set<std::string_view> kProblemKeys = {
-    "id",          "ordinal",     "label",        "name",
-    "rgb",         "color",       "time_limit",   "test_data_count",
-    "memory_limit", "output_limit", "code_limit",  "uuid",
-    "short_name",  "external_id", "statement",    "attachments",
+    "id",          "ordinal",      "label",        "name",
+    "rgb",         "color",        "time_limit",   "test_data_count",
+    "max_score",   "memory_limit", "output_limit", "code_limit",
+    "uuid",        "short_name",   "external_id",  "statement",
+    "attachments",
 };
 
 const std::unordered_set<std::string_view> kGroupKeys = {
@@ -120,6 +121,7 @@ const std::unordered_set<std::string_view> kJudgementKeys = {
     "submission_id",
     "judgement_type_id",
     "simplified_judgement_type_id",
+    "score",
     "start_time",
     "start_contest_time",
     "end_time",
@@ -250,7 +252,8 @@ std::unique_ptr<Problem> DecodeProblem(const json& data,
   obj->name = OptString(data, "name");
   obj->rgb = OptString(data, "rgb");
   obj->color = OptString(data, "color");
-  obj->time_limit = OptInt(data, "time_limit");
+  obj->time_limit = OptDouble(data, "time_limit");
+  obj->max_score = OptDouble(data, "max_score");
   obj->test_data_count = OptInt(data, "test_data_count");
   obj->memory_limit = OptInt(data, "memory_limit");
   obj->output_limit = OptInt(data, "output_limit");
@@ -398,6 +401,7 @@ std::unique_ptr<Judgement> DecodeJudgement(const json& data,
   obj->judgement_type_id = OptString(data, "judgement_type_id");
   obj->simplified_judgement_type_id =
       OptString(data, "simplified_judgement_type_id");
+  obj->score = OptDouble(data, "score");
   obj->start_time = OptAbsTime(data, "start_time", diags, line_no);
   obj->start_contest_time =
       OptRelTime(data, "start_contest_time", diags, line_no);
@@ -506,6 +510,25 @@ StatusOr<DecodeResult> DecodeTypedObject(
     ObjectType obj_type, const json& data, ApiVersion version,
     size_t line_no, const ParseOptions& options) {
   DecodeResult result;
+
+  if (options.strict_version && obj_type == ObjectType::kContest) {
+    auto penalty = data.find("penalty_time");
+    if (penalty != data.end() && !penalty->is_null()) {
+      const bool valid = version == ApiVersion::k2023_06
+                             ? penalty->is_number_integer()
+                             : penalty->is_string();
+      if (!valid) {
+        return Status(
+            StatusCode::kParseError,
+            "contest penalty_time does not match the declared API version");
+      }
+      if (version == ApiVersion::k2026_01 &&
+          !ParseRelTime(penalty->get<std::string>()).ok()) {
+        return Status(StatusCode::kParseError,
+                      "contest penalty_time is not a valid RELTIME");
+      }
+    }
+  }
 
   switch (obj_type) {
     case ObjectType::kContest:

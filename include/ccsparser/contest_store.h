@@ -47,6 +47,10 @@ class ContestStore {
   const State* GetState() const;
   size_t GetEventCount() const;
   std::vector<std::string> GetKnownProperties(ObjectType type) const;
+  // Raw extension values are canonical JSON strings, scoped by source type.
+  StatusOr<std::string> GetRawSingleton(std::string_view type) const;
+  StatusOr<std::string> GetRawObject(std::string_view type, std::string_view id) const;
+  std::map<std::string, std::string> ListRawObjects(std::string_view type) const;
 
   // Checkpoint/rollback.
   Checkpoint CreateCheckpoint() const;
@@ -69,12 +73,15 @@ class ContestStore {
   // Apply a singleton update.
   Status ApplySingletonUpdate(ObjectType type,
                               std::unique_ptr<ContestObject> obj);
+  Status ApplyRawExtension(const RawEvent& event);
 
   // Record an event in the event log.
   void RecordEvent(RawEvent event);
 
   // Notify observers of a diagnostic.
   void NotifyDiagnostic(const Diagnostic& diag);
+
+  void NotifyEndOfUpdates();
 
   // Get the event log.
   const std::vector<RawEvent>& GetEventLog() const;

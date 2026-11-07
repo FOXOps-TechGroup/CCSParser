@@ -10,6 +10,7 @@
 #include "ccsparser/contest_store.h"
 #include "ccsparser/diagnostic.h"
 #include "ccsparser/event.h"
+#include "ccsparser/event_feed_stream.h"
 #include "ccsparser/http_client.h"
 #include "ccsparser/objects.h"
 #include "ccsparser/observer.h"
@@ -17,5 +18,6 @@
 #include "ccsparser/parser.h"
 #include "ccsparser/status.h"
 #include "ccsparser/types.h"
+#include "ccsparser/visibility.h"
 
 #endif  // CCSPARSER_CCSPARSER_H_

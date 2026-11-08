@@ -29,6 +29,7 @@ struct StreamingParseSession::Impl {
   ParseOptions options;
   ContestStore store;
   EventCursor cursor;
+  std::optional<RawEvent> last_applied_event;
   std::vector<Diagnostic> diagnostics;
   std::unique_ptr<internal::VersionProfile> profile;
   ApiVersion resolved_version = ApiVersion::kAuto;
@@ -43,11 +44,24 @@ struct StreamingParseSession::Impl {
     }
   }
 
+  void CommitEvent(RawEvent &event, const nlohmann::json &data) {
+    if (event.data_json.empty() && event.shape != EventShape::kDelete) {
+      event.data_json = data.dump();
+    }
+    if (options.keep_event_log)
+      store.RecordEvent(event);
+    ++cursor.event_count;
+    if (cursor.contiguous) {
+      if (event.token)
+        cursor.last_token = event.token;
+      if (event.id)
+        cursor.last_event_id = event.id;
+    }
+    last_applied_event = std::move(event);
+  }
+
   Status ApplyEvent(internal::LineParseResult& lr) {
     auto& event = lr.event;
-
-    // Notify observers of raw event.
-    // (Observers are registered on the store and notified via store methods.)
 
     // Handle unknown type.
     if (event.object_type == ObjectType::kUnknown) {
@@ -72,12 +86,7 @@ struct StreamingParseSession::Impl {
       }
       auto status = store.ApplyRawExtension(event);
       if (!status.ok()) return status;
-      if (options.keep_event_log) store.RecordEvent(event);
-      ++cursor.event_count;
-      if (cursor.contiguous) {
-        if (event.token) cursor.last_token = event.token;
-        if (event.id) cursor.last_event_id = event.id;
-      }
+      CommitEvent(event, lr.parsed_data);
       return Status::Ok();
     }
 
@@ -105,17 +114,7 @@ struct StreamingParseSession::Impl {
     }
     if (!status.ok()) return status;
 
-    if (options.keep_event_log) {
-      if (event.data_json.empty() && event.shape != EventShape::kDelete) {
-        event.data_json = lr.parsed_data.dump();
-      }
-      store.RecordEvent(event);
-    }
-    cursor.event_count++;
-    if (cursor.contiguous) {
-      if (event.token.has_value()) cursor.last_token = event.token;
-      if (event.id.has_value()) cursor.last_event_id = event.id;
-    }
+    CommitEvent(event, lr.parsed_data);
     return Status::Ok();
   }
 
@@ -369,6 +368,10 @@ const EventCursor& StreamingParseSession::cursor() const {
   return impl_->cursor;
 }
 
+const RawEvent* StreamingParseSession::last_applied_event() const {
+  return impl_->last_applied_event ? &*impl_->last_applied_event : nullptr;
+}
+
 const ContestStore& StreamingParseSession::store() const {
   return impl_->store;
 }
@@ -415,6 +418,36 @@ EventFeedParser::CreateStreamingSession(const ParseOptions& options) {
 
   return std::unique_ptr<StreamingParseSession>(
       new StreamingParseSession(std::move(impl)));
+}
+
+StatusOr<std::unique_ptr<StreamingParseSession>>
+EventFeedParser::RestoreStreamingSession(ParseResult checkpoint,
+                                         const ParseOptions &options) {
+  if (!checkpoint.cursor.contiguous ||
+      (checkpoint.resolved_version != ApiVersion::k2023_06 &&
+       checkpoint.resolved_version != ApiVersion::k2026_01)) {
+    return Status(
+        StatusCode::kInvalidArgument,
+        "A complete checkpoint with a supported API version is required");
+  }
+  if (options.version != ApiVersion::kAuto &&
+      options.version != checkpoint.resolved_version) {
+    return Status(StatusCode::kInvalidArgument,
+                  "Checkpoint API version does not match parse options");
+  }
+  auto restored_options = options;
+  restored_options.version = checkpoint.resolved_version;
+  auto session = CreateStreamingSession(restored_options);
+  if (!session.ok())
+    return session.status();
+  auto &impl = *session.value()->impl_;
+  impl.store = std::move(checkpoint.store);
+  impl.cursor = std::move(checkpoint.cursor);
+  if (checkpoint.diagnostics.size() > options.limits.max_diagnostics) {
+    checkpoint.diagnostics.resize(options.limits.max_diagnostics);
+  }
+  impl.diagnostics = std::move(checkpoint.diagnostics);
+  return std::move(session.value());
 }
 
 StatusOr<ParseResult> EventFeedParser::ParseStream(

@@ -43,6 +43,8 @@ class StreamingParseSession {
   Status Finish();
 
   const EventCursor& cursor() const;
+  // Valid until the next successfully applied event. Available without history.
+  const RawEvent* last_applied_event() const;
   const ContestStore& store() const;
   ContestStore& mutable_store();
   const std::vector<Diagnostic>& diagnostics() const;
@@ -69,6 +71,11 @@ class EventFeedParser {
   // Create a streaming session for incremental parsing.
   static StatusOr<std::unique_ptr<StreamingParseSession>>
   CreateStreamingSession(const ParseOptions& options);
+
+  // The store and contiguous cursor must come from the same saved checkpoint.
+  // Register observers on the returned session after restoring it.
+  static StatusOr<std::unique_ptr<StreamingParseSession>>
+  RestoreStreamingSession(ParseResult checkpoint, const ParseOptions& options);
 };
 
 // Package parser for contest package directories and zip files.

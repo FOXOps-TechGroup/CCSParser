@@ -169,6 +169,21 @@ session->Finish();
 const auto& store = session->store();
 ```
 
+`last_applied_event()` exposes the most recent successfully applied raw record,
+including canonical `data_json`, even with `keep_event_log = false`. Its view is
+valid until the next successful event; keepalives and rejected records do not
+replace it. Streaming callbacks see this record and its committed cursor
+together, so consumers can persist object changes and the cursor atomically
+without retaining the full event history in memory.
+
+`RestoreStreamingSession(std::move(checkpoint), opts)` resumes a `ParseResult`
+store and contiguous cursor saved together. The checkpoint must declare a
+supported version matching any explicit option; the restored profile stays
+bound to that version. The caller owns checkpoint serialization and source
+identity checks, and should attach observers to the returned session. A terminal
+checkpoint remains terminal; a checkpoint with a rejected-record gap cannot be
+resumed.
+
 ## Supported Object Types
 
 contest, judgement-types, languages, problems, groups, organizations, teams, persons, accounts, state, submissions, judgements, runs, clarifications, awards, commentary

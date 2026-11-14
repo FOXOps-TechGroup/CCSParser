@@ -150,6 +150,13 @@ void ApplyOptions(CURL* curl, const HttpRequestOptions& options) {
   }
   if (options.ca_bundle_path) {
     curl_easy_setopt(curl, CURLOPT_CAINFO, options.ca_bundle_path->c_str());
+#if defined(_WIN32) && defined(CURLSSLOPT_REVOKE_BEST_EFFORT)
+    if (options.require_https && options.verify_ssl &&
+        !options.ca_bundle_path->empty()) {
+      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS,
+                       static_cast<long>(CURLSSLOPT_REVOKE_BEST_EFFORT));
+    }
+#endif
   }
 
   if (options.basic_auth.has_value()) {

@@ -59,6 +59,11 @@ ContestStore::~ContestStore() = default;
 ContestStore::ContestStore(ContestStore&&) noexcept = default;
 ContestStore& ContestStore::operator=(ContestStore&&) noexcept = default;
 
+// Keep this definition named GetObject if a Windows header included above
+// left the wingdi.h GetObject macro in place.
+#ifdef GetObject
+#undef GetObject
+#endif
 StatusOr<const ContestObject*> ContestStore::GetObject(
     ObjectType type, std::string_view id) const {
   if (type == ObjectType::kContest) {

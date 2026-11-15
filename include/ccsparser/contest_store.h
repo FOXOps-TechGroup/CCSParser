@@ -21,6 +21,14 @@
 
 namespace ccsparser {
 
+// <wingdi.h> (pulled in by <windows.h> and <winsock2.h>) does
+// `#define GetObject GetObjectA` or `GetObjectW`. That rewrites every
+// ContestStore::GetObject call in a translation unit that included those
+// headers. Suppress it while this declaration is parsed, then publish the
+// names the macro expands to so those call sites still resolve.
+#pragma push_macro("GetObject")
+#undef GetObject
+
 // Opaque checkpoint handle for rollback.
 struct Checkpoint {
   size_t event_index = 0;
@@ -42,6 +50,17 @@ class ContestStore {
   // Object queries.
   StatusOr<const ContestObject*> GetObject(ObjectType type,
                                            std::string_view id) const;
+#ifdef _WIN32
+  // Inline targets for the wingdi.h GetObject macro. See the push_macro above.
+  StatusOr<const ContestObject*> GetObjectA(ObjectType type,
+                                            std::string_view id) const {
+    return GetObject(type, id);
+  }
+  StatusOr<const ContestObject*> GetObjectW(ObjectType type,
+                                            std::string_view id) const {
+    return GetObject(type, id);
+  }
+#endif
   std::vector<const ContestObject*> ListObjects(ObjectType type) const;
   const Contest* GetContest() const;
   const State* GetState() const;
@@ -90,6 +109,8 @@ class ContestStore {
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+#pragma pop_macro("GetObject")
 
 }  // namespace ccsparser
 
